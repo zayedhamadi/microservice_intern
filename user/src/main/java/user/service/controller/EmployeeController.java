@@ -8,6 +8,6 @@ public class EmployeeController {
 
     @GetMapping("/ping")
     public String ping() {
-        return "employee-service OK";
+        return "user-service OK";
     }
 }

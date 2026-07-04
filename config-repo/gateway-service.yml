@@ -1,0 +1,20 @@
+spring:
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          discovery:
+            locator:
+              enabled: true
+              lower-case-service-id: true
+          routes:
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/employees/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
