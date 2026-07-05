@@ -1,20 +1,30 @@
 server:
   port: ${EMPLOYEE_PORT:8081}
+  shutdown: graceful
   tomcat:
     max-http-form-post-size: 20971520
 
 spring:
   application:
     name: user-service
-
   config:
     import: optional:configserver:http://localhost:${CONFIG_PORT:8888}
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
 
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      leak-detection-threshold: 30000
 
   jpa:
     hibernate:
@@ -26,13 +36,24 @@ spring:
         format_sql: true
         use_sql_comments: true
         dialect: org.hibernate.dialect.MySQLDialect
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
 
   mail:
     host: ${EMAIL_HOST}
     port: ${EMAIL_PORT}
     username: ${EMAIL_USER}
     password: ${EMAIL_PASSWORD}
-
+    properties:
+      mail:
+        debug: true
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
 
   security:
     oauth2:
@@ -68,8 +89,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,refresh
+  endpoint:
+    health:
+      show-details: always
+    refresh:
+      enabled: true
 
-#logging:
-#  level:
-#    root: info
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: WARN
+    org.hibernate.orm.jdbc.extract: WARN
+    org.springframework.data.jpa.repository.query: DEBUG
+    org.springframework.security: WARN
+    org.apache.catalina: WARN
+    org.apache.coyote: WARN
+    org.springframework.boot: WARN

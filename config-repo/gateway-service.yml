@@ -16,11 +16,11 @@ spring:
               lower-case-service-id: true
           routes:
             - id: user-service
-              uri: lb://user-service
+              uri: lb://USER-SERVICE
               predicates:
                 - Path=/api/employees/**
             - id: user-service-auth
-              uri: lb://user-service
+              uri: lb://USER-SERVICE
               predicates:
                 - Path=/auth/**
 
@@ -35,7 +35,12 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway
+        include: health,info,gateway,refresh
+  endpoint:
+    health:
+      show-details: always
+    refresh:
+      enabled: true
 
 logging:
   level:

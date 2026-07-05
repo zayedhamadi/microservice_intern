@@ -179,6 +179,8 @@ public class KeycloakService {
 
         } catch (HttpClientErrorException e) {
             log.error("Erreur login Keycloak : {}", e.getResponseBodyAsString());
+            log.error("Erreur login Keycloak - status: {}, body: {}", e.getStatusCode(), e.getResponseBodyAsString());
+
             throw new RuntimeException("Email ou mot de passe incorrect");
         }
     }

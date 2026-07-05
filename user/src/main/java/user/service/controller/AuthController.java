@@ -62,7 +62,6 @@ public class AuthController {
         }
     }
 
-    /** Appelé par Angular juste après le retour de Keycloak (token Google échangé). */
     @PostMapping("/google/sync")
     public ResponseEntity<?> syncGoogleUser(@AuthenticationPrincipal Jwt jwt) {
         try {
@@ -103,7 +102,6 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("url", url));
     }
 
-    /** Complète le profil après signup (Google ou classique). */
     @PutMapping("/complete-profile")
     public ResponseEntity<?> completeProfile(@AuthenticationPrincipal Jwt jwt,
                                              @RequestBody UpdateUSerAfterConnect dto) {
@@ -112,7 +110,7 @@ public class AuthController {
             User user = userService.completeProfile(keycloakId, dto);
             return ResponseEntity.ok(Map.of(
                     "message", "Profil complété",
-                    "role", user.getRole().name()
+                    "role", user.getRole() != null ? user.getRole().name() : "NON_DEFINI"
             ));
         } catch (RuntimeException e) {
             log.error("Erreur complete-profile : {}", e.getMessage());

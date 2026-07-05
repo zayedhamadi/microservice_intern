@@ -28,17 +28,9 @@ public class UpdateUSerAfterConnect {
     LocalDate dateNaissance;
     Integer num_Tel;
     String imageBase64;
-    // Réseaux sociaux
-    private String linkedin;
-    private String twitter;
-    private String siteweb;
+    //  sociaux
+     String linkedin, twitter,  siteweb,specialiteEtude,universiteEtude, niveauEtude;
 
-    // Études
-    private String specialiteEtude;
-    private String universiteEtude;
-
-    private String niveauEtude;
-
-    private Integer anneesExperience;
+     Integer anneesExperience;
 
 }
