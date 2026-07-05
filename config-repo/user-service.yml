@@ -40,11 +40,7 @@ spring:
           starttls:
             enable: true
             required: true
-          connectiontimeout: 50000
-          timeout: 30000
-          writetimeout: 50000
-          ssl:
-            trust: ${EMAIL_HOST:smtp.gmail.com}
+          
 
   security:
     oauth2:
@@ -81,22 +77,3 @@ management:
     web:
       exposure:
         include: health,info
-
-logging:
-  level:
-    root: INFO
-    org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: WARN
-    org.hibernate.orm.jdbc.extract: WARN
-    org.springframework.data.jpa.repository.query: DEBUG
-    org.springframework.security: WARN
-    org.apache.catalina: WARN
-    org.apache.coyote: WARN
-    org.springframework.boot: WARN
-
-  pattern:
-    console: "%d{HH:mm:ss} [%thread] %-5level %logger{36}.%M - %msg%n"
-    file: "%d{HH:mm:ss} [%thread] %-5level %logger{36}.%M - %msg%n"
-
-  file:
-    name: logs/user.log
