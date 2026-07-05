@@ -11,7 +11,7 @@ spring:
             - id: user-service
               uri: lb://user-service
               predicates:
-                - Path=${CONTEXT_PATH:/stage}/api/employees/**
+                - Path=/api/employees/**
 
 management:
   endpoints:
