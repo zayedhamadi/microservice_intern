@@ -6,6 +6,7 @@ spring:
     name: config-server
   cloud:
     config:
+      enabled: false
       server:
         git:
           uri: https://github.com/zayedhamadi/microservice_intern
@@ -27,4 +28,4 @@ management:
 
 logging:
   level:
-    org.springframework.cloud.config: INFO
+    org.springframework.cloud.config: debug
