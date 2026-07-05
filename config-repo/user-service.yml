@@ -4,7 +4,6 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
-
   jpa:
     hibernate:
       ddl-auto: update
@@ -12,7 +11,6 @@ spring:
     properties:
       hibernate:
         format_sql: true
-
   mail:
     host: ${EMAIL_HOST}
     port: ${EMAIL_PORT}
@@ -24,7 +22,6 @@ spring:
           auth: true
           starttls:
             enable: true
-
   security:
     oauth2:
       resourceserver:
