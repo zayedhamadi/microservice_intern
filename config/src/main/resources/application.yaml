@@ -28,4 +28,4 @@ management:
 
 logging:
   level:
-    org.springframework.cloud.config: debug
+    org.springframework.cloud.config: INFO
