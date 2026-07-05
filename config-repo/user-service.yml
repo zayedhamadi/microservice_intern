@@ -1,16 +1,32 @@
+server:
+  port: ${EMPLOYEE_PORT:8081}
+  tomcat:
+    max-http-form-post-size: 20971520
+
 spring:
+  application:
+    name: user-service
+
+  config:
+    import: optional:configserver:http://localhost:${CONFIG_PORT:8888}
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
+        use_sql_comments: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
   mail:
     host: ${EMAIL_HOST}
     port: ${EMAIL_PORT}
@@ -18,22 +34,47 @@ spring:
     password: ${EMAIL_PASSWORD}
     properties:
       mail:
+        debug: true
         smtp:
           auth: true
           starttls:
             enable: true
+            required: true
+          connectiontimeout: 50000
+          timeout: 30000
+          writetimeout: 50000
+          ssl:
+            trust: ${EMAIL_HOST:smtp.gmail.com}
+
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI}
 
-keycloak:
-  auth-server-url: ${KEYCLOAK_URL}
-  realm: ${KEYCLOAK_REALM}
-  resource: ${KEYCLOAK_CLIENT_ID}
-  credentials:
-    secret: ${CLIENT_SECRET_KEYCLOAK}
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 200MB
+
+  mvc:
+    async:
+      request-timeout: 30000
+
+  keycloak:
+    server-url: ${KEYCLOAK_URL}
+    realm: ${KEYCLOAK_REALM}
+    client-id: ${KEYCLOAK_CLIENT_ID}
+    client-secret: ${CLIENT_SECRET_KEYCLOAK}
+    admin-username: ${KEYCLOAK_ADMIN_USER}
+    admin-password: ${KEYCLOAK_ADMIN_PWD}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:${DISCOVERY_PORT:8761}/eureka/
+  instance:
+    prefer-ip-address: true
 
 management:
   endpoints:
@@ -43,4 +84,19 @@ management:
 
 logging:
   level:
+    root: INFO
     org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: WARN
+    org.hibernate.orm.jdbc.extract: WARN
+    org.springframework.data.jpa.repository.query: DEBUG
+    org.springframework.security: WARN
+    org.apache.catalina: WARN
+    org.apache.coyote: WARN
+    org.springframework.boot: WARN
+
+  pattern:
+    console: "%d{HH:mm:ss} [%thread] %-5level %logger{36}.%M - %msg%n"
+    file: "%d{HH:mm:ss} [%thread] %-5level %logger{36}.%M - %msg%n"
+
+  file:
+    name: logs/user.log

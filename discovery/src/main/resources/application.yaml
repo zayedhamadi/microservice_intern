@@ -11,8 +11,3 @@ eureka:
     fetch-registry: false
   server:
     enable-self-preservation: false
-
-logging:
-  level:
-    com.netflix.eureka: WARN
-    com.netflix.discovery: WARN
