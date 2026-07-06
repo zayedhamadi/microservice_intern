@@ -18,19 +18,14 @@ import java.time.LocalDate;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class UpdateUSerAfterConnect {
     Long id;
-    String email;
+
     Role role;
     Genre genre;
-    String adresse;
-    String nom;
-    String prenom;
-    String description;
+    String adresse, nom, prenom, description;
     LocalDate dateNaissance;
     Integer num_Tel;
-    String imageBase64;
-    //  sociaux
-     String linkedin, twitter,  siteweb,specialiteEtude,universiteEtude, niveauEtude;
+    String email, imageBase64, linkedin, twitter, siteweb, specialiteEtude, universiteEtude, niveauEtude;
 
-     Integer anneesExperience;
+    Integer anneesExperience;
 
 }
