@@ -178,24 +178,56 @@ public class KeycloakService {
                     .build();
 
         } catch (HttpClientErrorException e) {
-            log.error("Erreur login Keycloak : {}", e.getResponseBodyAsString());
             log.error("Erreur login Keycloak - status: {}, body: {}", e.getStatusCode(), e.getResponseBodyAsString());
-
             throw new RuntimeException("Email ou mot de passe incorrect");
         }
     }
 
-    public void deleteUserFromKeycloak(String keycloakId) {
-        String adminToken = getAdminToken();
-        String url = serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId;
+    public Map<String, Object> exchangeAuthorizationCode(String code, String redirectUri) {
+        String url = serverUrl + "/realms/" + realm + "/protocol/openid-connect/token";
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(adminToken);
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
-        restTemplate.exchange(url, HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
-        log.info("User '{}' supprimé de Keycloak", keycloakId);
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "authorization_code");
+        body.add("client_id", clientId);
+        body.add("client_secret", clientSecret);
+        body.add("code", code);
+        body.add("redirect_uri", redirectUri);
+
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+
+        try {
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    url, HttpMethod.POST, request,
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            return Objects.requireNonNull(response.getBody());
+        } catch (HttpClientErrorException e) {
+            log.error("Erreur échange code Keycloak : {}", e.getResponseBodyAsString());
+            throw new RuntimeException("Code d'autorisation invalide ou expiré");
+        }
     }
 
+    public void deleteUserFromKeycloak(String keycloakId) {
+        try {
+            String adminToken = getAdminToken();
+            String url = serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId;
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(adminToken);
+
+            restTemplate.exchange(url, HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
+            log.info("User '{}' supprimé de Keycloak", keycloakId);
+        } catch (HttpClientErrorException e) {
+            log.error("Erreur suppression user Keycloak : {}", e.getResponseBodyAsString());
+            throw new RuntimeException("Erreur suppression Keycloak : " + e.getMessage());
+        }
+    }
+
+    // Note : on ne touche plus à la DB ici (pas de UserRepository).
+    // Cette classe ne doit gérer QUE les appels vers Keycloak.
     public void changePassword(String keycloakId, String newPassword) {
         String adminToken = getAdminToken();
         String url = serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId + "/reset-password";
@@ -211,6 +243,37 @@ public class KeycloakService {
 
         restTemplate.exchange(url, HttpMethod.PUT, new HttpEntity<>(body, headers), Void.class);
         log.info("Password changé pour {}", keycloakId);
+    }
+
+    public void sendResetPasswordEmail(String keycloakId) {
+        String adminToken = getAdminToken();
+        String url = serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId + "/execute-actions-email";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(adminToken);
+
+        restTemplate.postForEntity(url, new HttpEntity<>(List.of("UPDATE_PASSWORD"), headers), Void.class);
+        log.info("Reset email envoyé via Keycloak pour {}", keycloakId);
+    }
+
+    public String findKeycloakIdByEmail(String email) {
+        String adminToken = getAdminToken();
+        String url = serverUrl + "/admin/realms/" + realm + "/users?email=" + email + "&exact=true";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(adminToken);
+
+        ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                url, HttpMethod.GET, new HttpEntity<>(headers),
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+        );
+
+        List<Map<String, Object>> users = response.getBody();
+        if (users == null || users.isEmpty()) {
+            throw new RuntimeException("Email introuvable");
+        }
+        return (String) users.get(0).get("id");
     }
 
     public void updateUserInKeycloak(String keycloakId, UpdateUSerAfterConnect dto) {

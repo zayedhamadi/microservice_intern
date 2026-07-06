@@ -36,7 +36,11 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/api/employees/**",
-            "/uploads/**"
+            "/uploads/**",
+            "/auth/google/callback",
+            "/auth/google/sync",
+            "/auth/forgot-password",
+            "/auth/reset-password",
     };
 
     JwtAuthConverter jwtAuthConverter;
@@ -45,7 +49,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                //.cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_URLS).permitAll()
@@ -59,25 +63,25 @@ public class SecurityConfig {
         return http.build();
     }
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(
-                "http://localhost:4200",
-                "http://localhost:8082",
-                "http://localhost:8080",
-                "http://localhost:5000",
-                "http://localhost:5001",
-                "http://localhost:5002"
-        ));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
-    }
+//    @Bean
+//    public CorsConfigurationSource corsConfigurationSource() {
+//        CorsConfiguration config = new CorsConfiguration();
+//        config.setAllowedOrigins(List.of(
+//                "http://localhost:4200",
+//                "http://localhost:8082",
+//                "http://localhost:8080",
+//                "http://localhost:5000",
+//                "http://localhost:5001",
+//                "http://localhost:5002"
+//        ));
+//        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+//        config.setAllowedHeaders(List.of("*"));
+//        config.setAllowCredentials(true);
+//
+//        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+//        source.registerCorsConfiguration("/**", config);
+//        return source;
+//    }
 
     @Bean
     public RestTemplate restTemplate() {

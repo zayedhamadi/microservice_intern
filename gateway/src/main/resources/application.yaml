@@ -19,10 +19,7 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/api/employees/**
-
-eureka:
-  client:
-    service-url:
+          
       defaultZone: http://localhost:${DISCOVERY_PORT:8761}/eureka/
   instance:
     prefer-ip-address: true

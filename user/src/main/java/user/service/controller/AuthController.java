@@ -8,16 +8,24 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.web.bind.annotation.*;
 import user.service.Dto.AuthResponse;
 import user.service.Dto.LoginRequest;
 import user.service.Dto.RegisterRequest;
 import user.service.Dto.UpdateUSerAfterConnect;
+import user.service.Entity.PasswordResetToken;
 import user.service.Entity.User;
+import user.service.Mail.UserEmailService;
+import user.service.Repository.PasswordResetTokenRepository;
+import user.service.Repository.UserRepository;
+import user.service.Serivce.KeycloakService;
 import user.service.Serivce.UserService;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @RestController
@@ -26,6 +34,11 @@ import java.util.Map;
 public class AuthController {
 
     private final UserService userService;
+    private final KeycloakService keycloakService;
+    private final JwtDecoder jwtDecoder;
+    private final UserEmailService userEmailService;
+    private final UserRepository userRepository;
+    private final PasswordResetTokenRepository tokenRepository;
 
     @Value("${keycloak.server-url}")
     private String keycloakUrl;
@@ -40,6 +53,7 @@ public class AuthController {
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
         try {
             User user = userService.register(request);
+            userEmailService.sendWelcomeEmail(user.getEmail(), user.getPrenom(), "http://localhost:4200/login");
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                     "message", "Compte créé avec succès",
                     "id", user.getId(),
@@ -47,6 +61,43 @@ public class AuthController {
             ));
         } catch (RuntimeException e) {
             log.error("Erreur register : {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/google/callback")
+    public ResponseEntity<?> googleCallback(@RequestParam String code) {
+        try {
+            Map<String, Object> tokenData = keycloakService.exchangeAuthorizationCode(
+                    code, "http://localhost:4200/callback"
+            );
+
+            String accessToken = (String) tokenData.get("access_token");
+            Jwt jwt = jwtDecoder.decode(accessToken);
+
+            String keycloakId = jwt.getSubject();
+            String email = jwt.getClaimAsString("email");
+            String prenom = jwt.getClaimAsString("given_name");
+            String nom = jwt.getClaimAsString("family_name");
+
+            User user = userService.syncGoogleUser(keycloakId, email, nom, prenom);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("accessToken", accessToken);
+            response.put("refreshToken", tokenData.get("refresh_token"));
+            response.put("tokenType", "Bearer");
+            response.put("expiresIn", tokenData.get("expires_in"));
+            response.put("id", user.getId());
+            response.put("email", user.getEmail());
+            response.put("nom", user.getNom());
+            response.put("prenom", user.getPrenom());
+            response.put("role", user.getRole() != null ? user.getRole().name() : null);
+            response.put("keycloakId", user.getKeycloakId());
+            response.put("profileComplete", user.getRole() != null);
+
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            log.error("Erreur Google callback : {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -76,9 +127,12 @@ public class AuthController {
             Map<String, Object> response = new HashMap<>();
             response.put("id", user.getId());
             response.put("email", user.getEmail());
-            response.put("nom", user.getNom());
-            response.put("prenom", user.getPrenom());
+            response.put("nom", user.getNom() != null ? user.getNom() : "");
+            response.put("prenom", user.getPrenom() != null ? user.getPrenom() : "");
+            response.put("genre", user.getGenre() != null ? user.getGenre().name() : null);
+            response.put("num_Tel", user.getNum_Tel());
             response.put("role", user.getRole() != null ? user.getRole().name() : null);
+            response.put("etatCompte", user.getEtatCompte().name());
             response.put("keycloakId", user.getKeycloakId());
             response.put("profileComplete", user.getRole() != null);
 
@@ -115,6 +169,89 @@ public class AuthController {
         } catch (RuntimeException e) {
             log.error("Erreur complete-profile : {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request) {
+        try {
+            String email = request.get("email");
+            if (email == null || email.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Email requis"));
+            }
+
+            Optional<User> userOpt = userRepository.findByEmail(email);
+
+            if (userOpt.isPresent()) {
+                User user = userOpt.get();
+                tokenRepository.deleteByEmail(email);
+
+                String token = UUID.randomUUID().toString();
+                PasswordResetToken resetToken = PasswordResetToken.builder()
+                        .token(token)
+                        .keycloakId(user.getKeycloakId())
+                        .email(email)
+                        .expiresAt(java.time.LocalDateTime.now().plusMinutes(30))
+                        .used(false)
+                        .build();
+
+                tokenRepository.save(resetToken);
+
+                String resetLink = "http://localhost:4200/reset-password?token=" + token;
+                userEmailService.sendResetPasswordEmail(user.getEmail(), user.getPrenom(), resetLink);
+                log.info("Email reset envoyé à {}", email);
+            }
+
+            return ResponseEntity.ok(Map.of("message", "Si cet email existe, vous recevrez un lien."));
+        } catch (Exception e) {
+            log.error("Erreur forgot-password : {}", e.getMessage(), e);
+            return ResponseEntity.ok(Map.of("message", "Si cet email existe, vous recevrez un lien."));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request) {
+        try {
+            String token = request.get("token");
+            String newPassword = request.get("newPassword");
+            String confirm = request.get("confirmPassword");
+
+            if (token == null || newPassword == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Token et mot de passe requis"));
+            }
+            if (!newPassword.equals(confirm)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Mots de passe différents"));
+            }
+            if (newPassword.length() < 8) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Minimum 8 caractères"));
+            }
+
+            Optional<PasswordResetToken> tokenOpt = tokenRepository.findByToken(token);
+            if (tokenOpt.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Lien invalide"));
+            }
+
+            PasswordResetToken resetToken = tokenOpt.get();
+
+            if (resetToken.getExpiresAt().isBefore(java.time.LocalDateTime.now())) {
+                tokenRepository.delete(resetToken);
+                return ResponseEntity.badRequest().body(Map.of("error", "Lien expiré. Faites une nouvelle demande."));
+            }
+            if (resetToken.isUsed()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Ce lien a déjà été utilisé."));
+            }
+
+            keycloakService.changePassword(resetToken.getKeycloakId(), newPassword);
+            tokenRepository.delete(resetToken);
+
+            userRepository.findByEmail(resetToken.getEmail())
+                    .ifPresent(user -> userEmailService.sendPasswordChangedEmail(user.getEmail(), user.getPrenom()));
+
+            log.info("Password reset réussi pour {}", resetToken.getEmail());
+            return ResponseEntity.ok(Map.of("message", "Mot de passe modifié avec succès !"));
+        } catch (Exception e) {
+            log.error("Erreur reset-password : {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", "Erreur lors du reset : " + e.getMessage()));
         }
     }
 }
