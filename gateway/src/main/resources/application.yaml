@@ -15,14 +15,32 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/auth/**
-            - id: user-service-api
+            - id: user-service-users
+              uri: lb://USER-SERVICE
+              predicates:
+                - Path=/users/**
+            - id: user-service-employees
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/api/employees/**
-          
-      defaultZone: http://localhost:${DISCOVERY_PORT:8761}/eureka/
+            - id: user-service-api-users
+              uri: lb://USER-SERVICE
+              predicates:
+                - Path=/api/users/**
+    loadbalancer:
+      retry:
+        enabled: true
+        max-retries-on-same-service-instance: 1
+        max-retries-on-next-service-instance: 2
+        retry-on-all-operations: true
+
   instance:
     prefer-ip-address: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:${DISCOVERY_PORT:8761}/eureka/
 
 management:
   endpoints:

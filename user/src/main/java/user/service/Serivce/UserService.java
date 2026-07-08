@@ -1,6 +1,5 @@
 package user.service.Serivce;
 
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -70,11 +69,6 @@ public class UserService {
         return response;
     }
 
-    /**
-     * Appelé après connexion Google. Si l'utilisateur n'existe pas encore en DB,
-     * il est créé avec le strict minimum (email, nom, prénom). Le reste du profil
-     * (rôle, adresse, etc.) sera complété via completeProfile().
-     */
     @Transactional
     public User syncGoogleUser(String keycloakId, String email, String nom, String prenom) {
         return userRepository.findByKeycloakId(keycloakId)
@@ -92,15 +86,11 @@ public class UserService {
                             .prenom(prenom != null ? prenom : "")
                             .etatCompte(Compte.ACTIF)
                             .build();
-                    // Pas de rôle assigné ici : forcé de compléter le profil (voir completeProfile)
 
                     return userRepository.save(newUser);
                 });
     }
 
-    /**
-     * Complète le profil après signup (Google ou classique) : rôle, coordonnées, etc.
-     */
     @Transactional
     public User completeProfile(String keycloakId, UpdateUSerAfterConnect dto) {
         User user = getUserByKeycloakId(keycloakId);
@@ -117,17 +107,13 @@ public class UserService {
         if (dto.getTwitter() != null) user.setTwitter(dto.getTwitter());
         if (dto.getSiteweb() != null) user.setSiteweb(dto.getSiteweb());
         if (dto.getSpecialiteEtude() != null) user.setSpecialiteEtude(dto.getSpecialiteEtude());
-        if (dto.getUniversiteEtude() != null) user.setUniversiteEtude(dto.getUniversiteEtude());
-        if (dto.getNiveauEtude() != null) user.setNiveauEtude(NiveauEtude.valueOf(dto.getNiveauEtude()));
-        if (dto.getAnneesExperience() != null) user.setAnneesExperience(dto.getAnneesExperience());
+               if (dto.getAnneesExperience() != null) user.setAnneesExperience(dto.getAnneesExperience());
 
-        // Rôle assigné une seule fois (à la complétion du profil, si pas déjà défini)
         if (dto.getRole() != null && user.getRole() == null) {
             user.setRole(dto.getRole());
             keycloakService.assignRoleInKeycloak(keycloakId, dto.getRole().name());
         }
 
-        // Email modifiable seulement si différent et libre
         if (dto.getEmail() != null && !dto.getEmail().isBlank()
                 && !dto.getEmail().equalsIgnoreCase(user.getEmail())) {
             if (userRepository.existsByEmail(dto.getEmail())) {

@@ -44,8 +44,7 @@
         String description;
 
         @Column(length = 100)
-        String linkedin, twitter, siteweb;
-        String specialiteEtude, universiteEtude, codePostal;
+        String linkedin, twitter, siteweb, specialiteEtude;
 
 
         @Enumerated(EnumType.STRING)

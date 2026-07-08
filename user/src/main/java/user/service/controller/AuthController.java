@@ -26,7 +26,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-
+import user.service.Dto.ForgetPwRequest;
+import user.service.Dto.ResetPwRequest;
 @Slf4j
 @RestController
 @RequestMapping("/auth")
@@ -48,7 +49,75 @@ public class AuthController {
 
     @Value("${keycloak.client-id}")
     private String clientId;
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgetPwRequest request) {
+        log.info("Forgot password appelé pour {}", request.getEmail());
 
+        try {
+            Optional<User> userOpt = userRepository.findByEmail(request.getEmail());
+
+            if (userOpt.isPresent()) {
+                User user = userOpt.get();
+                tokenRepository.deleteByEmail(request.getEmail());
+
+                String token = java.util.UUID.randomUUID().toString();
+                PasswordResetToken resetToken = PasswordResetToken.builder()
+                        .token(token)
+                        .keycloakId(user.getKeycloakId())
+                        .email(request.getEmail())
+                        .expiresAt(java.time.LocalDateTime.now().plusMinutes(30))
+                        .used(false)
+                        .build();
+
+                tokenRepository.save(resetToken);
+
+                String resetLink = "http://localhost:4200/reset-password?token=" + token;
+                userEmailService.sendResetPasswordEmail(user.getEmail(), user.getPrenom(), resetLink);
+                log.info("Email reset envoyé à {}", request.getEmail());
+            }
+
+            return ResponseEntity.ok(Map.of("message", "Si cet email existe, vous recevrez un lien."));
+        } catch (Exception e) {
+            log.error("Erreur forgot-password : {}", e.getMessage(), e);
+            return ResponseEntity.ok(Map.of("message", "Si cet email existe, vous recevrez un lien."));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPwRequest request) {
+        try {
+            if (!request.getPassword().equals(request.getConfirmPassword())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Mots de passe différents"));
+            }
+
+            Optional<PasswordResetToken> tokenOpt = tokenRepository.findByToken(request.getToken());
+            if (tokenOpt.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Lien invalide"));
+            }
+
+            PasswordResetToken resetToken = tokenOpt.get();
+
+            if (resetToken.getExpiresAt().isBefore(java.time.LocalDateTime.now())) {
+                tokenRepository.delete(resetToken);
+                return ResponseEntity.badRequest().body(Map.of("error", "Lien expiré. Faites une nouvelle demande."));
+            }
+            if (resetToken.isUsed()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Ce lien a déjà été utilisé."));
+            }
+
+            keycloakService.changePassword(resetToken.getKeycloakId(), request.getPassword());
+            tokenRepository.delete(resetToken);
+
+            userRepository.findByEmail(resetToken.getEmail())
+                    .ifPresent(user -> userEmailService.sendPasswordChangedEmail(user.getEmail(), user.getPrenom()));
+
+            log.info("Password reset réussi pour {}", resetToken.getEmail());
+            return ResponseEntity.ok(Map.of("message", "Mot de passe modifié avec succès !"));
+        } catch (Exception e) {
+            log.error("Erreur reset-password : {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", "Erreur lors du reset : " + e.getMessage()));
+        }
+    }
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
         try {
@@ -156,102 +225,5 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("url", url));
     }
 
-    @PutMapping("/complete-profile")
-    public ResponseEntity<?> completeProfile(@AuthenticationPrincipal Jwt jwt,
-                                             @RequestBody UpdateUSerAfterConnect dto) {
-        try {
-            String keycloakId = jwt.getSubject();
-            User user = userService.completeProfile(keycloakId, dto);
-            return ResponseEntity.ok(Map.of(
-                    "message", "Profil complété",
-                    "role", user.getRole() != null ? user.getRole().name() : "NON_DEFINI"
-            ));
-        } catch (RuntimeException e) {
-            log.error("Erreur complete-profile : {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
 
-    @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request) {
-        try {
-            String email = request.get("email");
-            if (email == null || email.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Email requis"));
-            }
-
-            Optional<User> userOpt = userRepository.findByEmail(email);
-
-            if (userOpt.isPresent()) {
-                User user = userOpt.get();
-                tokenRepository.deleteByEmail(email);
-
-                String token = UUID.randomUUID().toString();
-                PasswordResetToken resetToken = PasswordResetToken.builder()
-                        .token(token)
-                        .keycloakId(user.getKeycloakId())
-                        .email(email)
-                        .expiresAt(java.time.LocalDateTime.now().plusMinutes(30))
-                        .used(false)
-                        .build();
-
-                tokenRepository.save(resetToken);
-
-                String resetLink = "http://localhost:4200/reset-password?token=" + token;
-                userEmailService.sendResetPasswordEmail(user.getEmail(), user.getPrenom(), resetLink);
-                log.info("Email reset envoyé à {}", email);
-            }
-
-            return ResponseEntity.ok(Map.of("message", "Si cet email existe, vous recevrez un lien."));
-        } catch (Exception e) {
-            log.error("Erreur forgot-password : {}", e.getMessage(), e);
-            return ResponseEntity.ok(Map.of("message", "Si cet email existe, vous recevrez un lien."));
-        }
-    }
-
-    @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request) {
-        try {
-            String token = request.get("token");
-            String newPassword = request.get("newPassword");
-            String confirm = request.get("confirmPassword");
-
-            if (token == null || newPassword == null) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Token et mot de passe requis"));
-            }
-            if (!newPassword.equals(confirm)) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Mots de passe différents"));
-            }
-            if (newPassword.length() < 8) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Minimum 8 caractères"));
-            }
-
-            Optional<PasswordResetToken> tokenOpt = tokenRepository.findByToken(token);
-            if (tokenOpt.isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Lien invalide"));
-            }
-
-            PasswordResetToken resetToken = tokenOpt.get();
-
-            if (resetToken.getExpiresAt().isBefore(java.time.LocalDateTime.now())) {
-                tokenRepository.delete(resetToken);
-                return ResponseEntity.badRequest().body(Map.of("error", "Lien expiré. Faites une nouvelle demande."));
-            }
-            if (resetToken.isUsed()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Ce lien a déjà été utilisé."));
-            }
-
-            keycloakService.changePassword(resetToken.getKeycloakId(), newPassword);
-            tokenRepository.delete(resetToken);
-
-            userRepository.findByEmail(resetToken.getEmail())
-                    .ifPresent(user -> userEmailService.sendPasswordChangedEmail(user.getEmail(), user.getPrenom()));
-
-            log.info("Password reset réussi pour {}", resetToken.getEmail());
-            return ResponseEntity.ok(Map.of("message", "Mot de passe modifié avec succès !"));
-        } catch (Exception e) {
-            log.error("Erreur reset-password : {}", e.getMessage(), e);
-            return ResponseEntity.badRequest().body(Map.of("error", "Erreur lors du reset : " + e.getMessage()));
-        }
-    }
 }
