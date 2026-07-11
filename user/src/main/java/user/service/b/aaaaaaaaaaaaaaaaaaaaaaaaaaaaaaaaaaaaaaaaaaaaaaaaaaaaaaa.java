@@ -1,4 +1,4 @@
-package user.service.Serivce;
+package user.service.b;
 
 public class aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa {
 }

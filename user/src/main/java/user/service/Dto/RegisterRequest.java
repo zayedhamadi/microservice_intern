@@ -1,43 +1,34 @@
 package user.service.Dto;
 
-
 import jakarta.validation.constraints.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-import user.service.Entity.Enum.Genre;
 import user.service.Entity.Enum.Role;
-
-
-import java.time.LocalDate;
 
 @Getter
 @Setter
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class RegisterRequest {
 
-    @NotBlank(message = "Le nom est obligatoire")
+    @NotBlank(message = "Le nom est requis")
+    @Size(min = 2, max = 50)
     String nom;
 
-    @NotBlank(message = "Le prénom est obligatoire")
+    @NotBlank(message = "Le prénom est requis")
+    @Size(min = 2, max = 50)
     String prenom;
 
-    @NotBlank(message = "L'email est obligatoire")
-    @Email(message = "Email invalide")
+    @NotBlank
+    @Email(message = "Format d'email invalide")
     String email;
 
-    @NotBlank(message = "Le mot de passe est obligatoire")
-    @Size(min = 8, message = "Minimum 8 caractères")
+    @NotBlank
+    @Size(min = 8, max = 64)
     String password;
 
-    @NotNull(message = "Le rôle est obligatoire")
+    @NotNull(message = "Le rôle est requis")
     Role role;
-
-    Genre genre;
-    String adresse;
-    String description;
-    LocalDate dateNaissance;
-    Integer num_Tel;
 }

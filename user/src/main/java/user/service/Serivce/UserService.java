@@ -10,10 +10,9 @@ import user.service.Dto.RegisterRequest;
 import user.service.Dto.UpdateUSerAfterConnect;
 import user.service.Entity.Enum.Compte;
 import user.service.Entity.Enum.NiveauEtude;
+import user.service.Entity.Enum.Role;
 import user.service.Entity.User;
 import user.service.Repository.UserRepository;
-
-import java.util.List;
 
 @Slf4j
 @Service
@@ -22,9 +21,20 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final KeycloakService keycloakService;
+    private final UserFinderService userFinderService;
+    private final FileService fileService;
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
 
     @Transactional
     public User register(RegisterRequest dto) {
+        if (dto.getRole() == Role.EMPLOYEE) {
+            throw new RuntimeException(
+                    "Le rôle EMPLOYEE ne peut pas être choisi à l'inscription.");
+        }
+
         if (userRepository.existsByEmail(dto.getEmail())) {
             throw new RuntimeException("Email déjà utilisé : " + dto.getEmail());
         }
@@ -38,11 +48,6 @@ public class UserService {
                 .nom(dto.getNom())
                 .prenom(dto.getPrenom())
                 .role(dto.getRole())
-                .genre(dto.getGenre())
-                .adresse(dto.getAdresse())
-                .description(dto.getDescription())
-                .dateNaissance(dto.getDateNaissance())
-                .num_Tel(dto.getNum_Tel())
                 .etatCompte(Compte.ACTIF)
                 .build();
 
@@ -51,12 +56,38 @@ public class UserService {
         return saved;
     }
 
-    public AuthResponse login(LoginRequest dto) {
-        User user = userRepository.findByEmail(dto.getEmail())
-                .orElseThrow(() -> new RuntimeException("Aucun compte trouvé pour : " + dto.getEmail()));
+    @Transactional
+    public User createBootstrapEmployee(String email, String password, String nom, String prenom) {
+        if (this.userFinderService.existsByEmail(email)) {
+            throw new IllegalStateException("Le compte bootstrap existe déjà : " + email);
+        }
 
+        RegisterRequest fakeDto = RegisterRequest.builder()
+                .email(email)
+                .password(password)
+                .nom(nom)
+                .prenom(prenom)
+                .role(Role.EMPLOYEE)
+                .build();
+
+        String keycloakId = keycloakService.createUserInKeycloak(fakeDto);
+
+        User user = User.builder()
+                .keycloakId(keycloakId)
+                .email(email)
+                .nom(nom)
+                .prenom(prenom)
+                .role(Role.EMPLOYEE)
+                .etatCompte(Compte.ACTIF)
+                .build();
+        log.info(" create Bootstrap Employee avec success ", user);
+        return userRepository.save(user);
+    }
+
+    public AuthResponse login(LoginRequest dto) {
+        User user = this.userFinderService.byEmail(dto.getEmail());
         if (user.getEtatCompte() == Compte.INACTIF) {
-            throw new RuntimeException("Compte désactivé. Contactez l'administrateur.");
+            throw new RuntimeException("Compte désactivé. Contacte l'administrateur.");
         }
 
         AuthResponse response = keycloakService.login(dto);
@@ -66,7 +97,10 @@ public class UserService {
         response.setRole(user.getRole().name());
         response.setId(user.getId());
         response.setKeycloakId(user.getKeycloakId());
+        log.info(" done login with user  ", response.getEmail(), response.getRole());
+
         return response;
+
     }
 
     @Transactional
@@ -75,7 +109,7 @@ public class UserService {
                 .orElseGet(() -> {
                     log.info("Nouvelle connexion Google (signup) : {}", email);
 
-                    if (userRepository.existsByEmail(email)) {
+                    if (this.userFinderService.existsByEmail(email)) {
                         throw new RuntimeException("Email déjà utilisé avec un compte classique !");
                     }
 
@@ -91,9 +125,31 @@ public class UserService {
                 });
     }
 
+
     @Transactional
     public User completeProfile(String keycloakId, UpdateUSerAfterConnect dto) {
-        User user = getUserByKeycloakId(keycloakId);
+        User user = this.userFinderService.getUserByKeycloakId(keycloakId);
+
+        if (dto.getRole() != null) {
+            if (dto.getRole() == Role.EMPLOYEE) {
+                throw new RuntimeException(
+                        "Le rôle EMPLOYEE ne peut pas être assigné via cette route.");
+            }
+            if (user.getRole() != null && user.getRole() != dto.getRole()) {
+                throw new RuntimeException("Le rôle est déjà défini et ne peut pas être modifié.");
+            }
+            if (user.getRole() == null) {
+                user.setRole(dto.getRole());
+                keycloakService.assignRoleInKeycloak(keycloakId, dto.getRole().name());
+            }
+        }
+
+        Role effectiveRole = user.getRole();
+        if (effectiveRole == null) {
+            throw new RuntimeException("Le rôle doit être choisi avant de compléter le profil.");
+        }
+
+        validateRoleSpecificFields(effectiveRole, dto);
 
         if (dto.getNom() != null) user.setNom(dto.getNom());
         if (dto.getPrenom() != null) user.setPrenom(dto.getPrenom());
@@ -102,21 +158,25 @@ public class UserService {
         if (dto.getGenre() != null) user.setGenre(dto.getGenre());
         if (dto.getNum_Tel() != null) user.setNum_Tel(dto.getNum_Tel());
         if (dto.getDateNaissance() != null) user.setDateNaissance(dto.getDateNaissance());
-
         if (dto.getLinkedin() != null) user.setLinkedin(dto.getLinkedin());
         if (dto.getTwitter() != null) user.setTwitter(dto.getTwitter());
         if (dto.getSiteweb() != null) user.setSiteweb(dto.getSiteweb());
-        if (dto.getSpecialiteEtude() != null) user.setSpecialiteEtude(dto.getSpecialiteEtude());
-               if (dto.getAnneesExperience() != null) user.setAnneesExperience(dto.getAnneesExperience());
 
-        if (dto.getRole() != null && user.getRole() == null) {
-            user.setRole(dto.getRole());
-            keycloakService.assignRoleInKeycloak(keycloakId, dto.getRole().name());
+        if (dto.getSpecialiteEtude() != null) user.setSpecialiteEtude(dto.getSpecialiteEtude());
+        if (dto.getUniversiteEtude() != null) user.setUniversiteEtude(dto.getUniversiteEtude());
+        if (dto.getAnneesExperience() != null) user.setAnneesExperience(dto.getAnneesExperience());
+        if (dto.getNiveauEtude() != null && !dto.getNiveauEtude().isBlank()) {
+            try {
+                user.setNiveauEtude(NiveauEtude.valueOf(dto.getNiveauEtude()));
+            } catch (IllegalArgumentException e) {
+                throw new RuntimeException("Niveau d'étude invalide : " + dto.getNiveauEtude());
+            }
         }
 
+        // --- 4. Email ---
         if (dto.getEmail() != null && !dto.getEmail().isBlank()
                 && !dto.getEmail().equalsIgnoreCase(user.getEmail())) {
-            if (userRepository.existsByEmail(dto.getEmail())) {
+            if (userFinderService.existsByEmail(dto.getEmail())) {
                 throw new RuntimeException("Cet email est déjà utilisé");
             }
             user.setEmail(dto.getEmail());
@@ -124,47 +184,45 @@ public class UserService {
         keycloakService.updateUserInKeycloak(keycloakId, dto);
 
         if (dto.getImageBase64() != null && !dto.getImageBase64().isBlank()) {
-            try {
-                String base64 = dto.getImageBase64();
-                if (base64.contains(",")) base64 = base64.substring(base64.indexOf(",") + 1);
-                user.setImage(java.util.Base64.getDecoder().decode(base64));
-            } catch (IllegalArgumentException e) {
-                throw new RuntimeException("Image Base64 invalide : " + e.getMessage());
+            byte[] decoded = fileService.decodeBase64(dto.getImageBase64());
+            if (decoded == null) {
+                throw new RuntimeException("Image Base64 invalide");
             }
+            if (!fileService.isValidFileSize(decoded, 2L * 1024 * 1024)) {
+                throw new RuntimeException("Image trop volumineuse (max 2MB)");
+            }
+            user.setImage(decoded);
+        }
+
+        // --- 6. CV (PDF, optionnel, seulement pour CANDIDAT/EMPLOYEE) ---
+        if (dto.getCvBase64() != null && !dto.getCvBase64().isBlank()) {
+            if (!user.requiresEtudes()) {
+                throw new RuntimeException("Le CV n'est pas applicable à ce rôle.");
+            }
+            byte[] decoded = fileService.decodeBase64(dto.getCvBase64());
+            if (decoded == null) {
+                throw new RuntimeException("CV Base64 invalide");
+            }
+            if (!fileService.isValidFileSize(decoded, 5L * 1024 * 1024)) {
+                throw new RuntimeException("CV trop volumineux (max 5MB)");
+            }
+            user.setCvUser(decoded);
         }
 
         User saved = userRepository.save(user);
-        log.info("Profil complété pour {}", keycloakId);
+        log.info("Profil complété pour {} (rôle={})", keycloakId, effectiveRole);
         return saved;
     }
 
-    public List<User> getAllUsers() {
-        return userRepository.findAll();
+    private void validateRoleSpecificFields(Role role, UpdateUSerAfterConnect dto) {
+        if (role == Role.CANDIDAT || role == Role.EMPLOYEE) {
+            boolean missingSpecialite = isBlank(dto.getSpecialiteEtude());
+            boolean missingNiveau = dto.getNiveauEtude() == null || dto.getNiveauEtude().isBlank();
+            if (missingSpecialite || missingNiveau) {
+                throw new RuntimeException(
+                        "La spécialité et le niveau d'étude sont requis pour votre rôle.");
+            }
+        }
     }
 
-    public User getUserById(Long id) {
-        return userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User non trouvé avec ID : " + id));
-    }
-
-    public User getUserByKeycloakId(String keycloakId) {
-        return userRepository.findByKeycloakId(keycloakId)
-                .orElseThrow(() -> new RuntimeException("User non trouvé avec keycloakId : " + keycloakId));
-    }
-
-    @Transactional
-    public void deleteUser(Long id) {
-        User user = getUserById(id);
-        keycloakService.deleteUserFromKeycloak(user.getKeycloakId());
-        userRepository.delete(user);
-        log.info("User {} supprimé", id);
-    }
-
-    @Transactional
-    public void changeUserStatus(Long id, boolean activate) {
-        User user = getUserById(id);
-        user.setEtatCompte(activate ? Compte.ACTIF : Compte.INACTIF);
-        userRepository.save(user);
-        log.info("User {} → {}", id, activate ? "ACTIF" : "INACTIF");
-    }
 }

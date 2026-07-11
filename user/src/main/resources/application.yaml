@@ -7,6 +7,7 @@ server:
 spring:
   application:
     name: user-service
+
   config:
     import: optional:configserver:http://localhost:${CONFIG_PORT:8888}
 
@@ -33,9 +34,9 @@ spring:
     open-in-view: false
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
         use_sql_comments: true
-        dialect: org.hibernate.dialect.MySQLDialect
         jdbc:
           batch_size: 20
         order_inserts: true
@@ -68,7 +69,7 @@ spring:
 
   mvc:
     async:
-      request-timeout: 30000
+      request-timeout: 30s
 
 keycloak:
   server-url: ${KEYCLOAK_URL}
@@ -82,14 +83,19 @@ eureka:
   client:
     service-url:
       defaultZone: http://localhost:${DISCOVERY_PORT:8761}/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+
   instance:
     prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,refresh
+
   endpoint:
     health:
       show-details: always
@@ -101,9 +107,14 @@ logging:
     root: INFO
     org.hibernate.SQL: DEBUG
     org.hibernate.orm.jdbc.bind: WARN
-    org.hibernate.orm.jdbc.extract: WARN
-    org.springframework.data.jpa.repository.query: DEBUG
-    org.springframework.security: WARN
-    org.apache.catalina: WARN
-    org.apache.coyote: WARN
-    org.springframework.boot: WARN
+    org.springframework.security: INFO
+    org.springframework.cloud.config: INFO
+
+app:
+  bootstrap:
+    employee:
+      enabled: true
+      email: ${EMAIL_ADMIN}
+      password: ${BOOTSTRAP_ADMIN_PASSWORD}
+      nom: ${NOM_ADMIN}
+      prenom: ${PRENOM_ADMIN}

@@ -27,7 +27,13 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/api/users/**
+            - id: user-service-api-certifications
+              uri: lb://USER-SERVICE
+              predicates:
+                - Path=/certifications/**
     loadbalancer:
+      cache:
+        ttl: 5s          
       retry:
         enabled: true
         max-retries-on-same-service-instance: 1
@@ -41,6 +47,7 @@ eureka:
   client:
     service-url:
       defaultZone: http://localhost:${DISCOVERY_PORT:8761}/eureka/
+    registry-fetch-interval-seconds: 5
 
 management:
   endpoints:

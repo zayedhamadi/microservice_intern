@@ -10,24 +10,21 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.web.bind.annotation.*;
-import user.service.Dto.AuthResponse;
-import user.service.Dto.LoginRequest;
-import user.service.Dto.RegisterRequest;
-import user.service.Dto.UpdateUSerAfterConnect;
+import user.service.Dto.*;
 import user.service.Entity.PasswordResetToken;
 import user.service.Entity.User;
 import user.service.Mail.UserEmailService;
 import user.service.Repository.PasswordResetTokenRepository;
 import user.service.Repository.UserRepository;
 import user.service.Serivce.KeycloakService;
+import user.service.Serivce.TokenBlacklistService;
 import user.service.Serivce.UserService;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
-import user.service.Dto.ForgetPwRequest;
-import user.service.Dto.ResetPwRequest;
+
 @Slf4j
 @RestController
 @RequestMapping("/auth")
@@ -40,6 +37,7 @@ public class AuthController {
     private final UserEmailService userEmailService;
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Value("${keycloak.server-url}")
     private String keycloakUrl;
@@ -49,6 +47,25 @@ public class AuthController {
 
     @Value("${keycloak.client-id}")
     private String clientId;
+
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@AuthenticationPrincipal Jwt jwt) {
+        try {
+            String jti = jwt.getId();
+            Instant expiresAt = jwt.getExpiresAt();
+
+            if (jti != null && expiresAt != null) {
+                tokenBlacklistService.blacklist(jti, expiresAt);
+            }
+
+            return ResponseEntity.ok(Map.of("message", "Déconnexion effectuée, token révoqué."));
+        } catch (Exception e) {
+            log.error("Erreur logout : {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", "Erreur lors de la déconnexion."));
+        }
+    }
+
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgetPwRequest request) {
         log.info("Forgot password appelé pour {}", request.getEmail());
@@ -118,10 +135,11 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error", "Erreur lors du reset : " + e.getMessage()));
         }
     }
+
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
         try {
-            User user = userService.register(request);
+            User user = userService.register(request); // lève déjà l'exception si EMPLOYEE
             userEmailService.sendWelcomeEmail(user.getEmail(), user.getPrenom(), "http://localhost:4200/login");
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                     "message", "Compte créé avec succès",

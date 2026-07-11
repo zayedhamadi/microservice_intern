@@ -8,10 +8,13 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import user.service.Dto.UpdateUSerAfterConnect;
-import user.service.Entity.Enum.Role;
+import user.service.Dto.UpdateUserRequest;
 import user.service.Entity.User;
+import user.service.Serivce.UserCommunService;
+import user.service.Serivce.UserFinderService;
 import user.service.Serivce.UserService;
 
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -22,15 +25,49 @@ import java.util.Map;
 public class UserCommunController {
 
     private final UserService userService;
+    private final UserCommunService userCommunService;
+    private final UserFinderService userFinderService;
 
+    @PutMapping("/updateMyProfile")
+    public ResponseEntity<?> updateMyProfile(@AuthenticationPrincipal Jwt jwt,
+                                             @RequestBody UpdateUserRequest request) {
+        try {
+            User user = userCommunService.updateUser(jwt.getSubject(), request);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Profil mis à jour avec succès",
+                    "profileComplete", user.isProfileComplete()
+            ));
+        } catch (RuntimeException e) {
+            log.error("Erreur update-profile : {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+    @GetMapping("/me/full-profile")
+    public ResponseEntity<?> getMyFullProfile(@AuthenticationPrincipal Jwt jwt) {
+        // TODO: brancher les vrais services Poste / Département / Responsable / PositionHistory
+        // quand ils existeront. Ce stub évite le 500 (NoResourceFoundException) en attendant.
+        User user = this.userFinderService.getUserByKeycloakId(jwt.getSubject());
+        return ResponseEntity.ok(Map.of(
+                "departementActuel", Map.of(),
+                "posteActuel", Map.of(),
+                "responsable", Map.of(),
+                "positionHistory", List.of()
+        ));
+    }
     @GetMapping("/me")
     public ResponseEntity<?> getMyProfile(@AuthenticationPrincipal Jwt jwt) {
-        User user = userService.getUserByKeycloakId(jwt.getSubject());
+        User user = this.userFinderService.getUserByKeycloakId(jwt.getSubject());
 
         String imageBase64 = null;
         if (user.getImage() != null && user.getImage().length > 0) {
             imageBase64 = "data:image/jpeg;base64,"
                     + java.util.Base64.getEncoder().encodeToString(user.getImage());
+        }
+
+        String cvBase64 = null;
+        if (user.getCvUser() != null && user.getCvUser().length > 0) {
+            cvBase64 = "data:application/pdf;base64,"
+                    + java.util.Base64.getEncoder().encodeToString(user.getCvUser());
         }
 
         return ResponseEntity.ok(Map.ofEntries(
@@ -46,13 +83,18 @@ public class UserCommunController {
                 Map.entry("num_Tel", user.getNum_Tel() != null ? user.getNum_Tel() : 0),
                 Map.entry("dateNaissance", user.getDateNaissance() != null ? user.getDateNaissance().toString() : ""),
                 Map.entry("specialiteEtude", user.getSpecialiteEtude() != null ? user.getSpecialiteEtude() : ""),
+                Map.entry("universiteEtude", user.getUniversiteEtude() != null ? user.getUniversiteEtude() : ""),
                 Map.entry("niveauEtude", user.getNiveauEtude() != null ? user.getNiveauEtude().name() : ""),
                 Map.entry("anneesExperience", user.getAnneesExperience() != null ? user.getAnneesExperience() : 0),
                 Map.entry("linkedin", user.getLinkedin() != null ? user.getLinkedin() : ""),
                 Map.entry("twitter", user.getTwitter() != null ? user.getTwitter() : ""),
                 Map.entry("siteweb", user.getSiteweb() != null ? user.getSiteweb() : ""),
                 Map.entry("etatCompte", user.getEtatCompte().name()),
-                Map.entry("imageBase64", imageBase64 != null ? imageBase64 : "")
+                Map.entry("imageBase64", imageBase64 != null ? imageBase64 : ""),
+                Map.entry("cvBase64", cvBase64 != null ? cvBase64 : ""),
+                Map.entry("profileComplete", user.isProfileComplete()),
+                Map.entry("missingFields", user.getMissingFields()),
+                Map.entry("requiresEtudes", user.requiresEtudes())
         ));
     }
 
@@ -61,17 +103,11 @@ public class UserCommunController {
                                              @RequestBody UpdateUSerAfterConnect dto) {
         try {
             String keycloakId = jwt.getSubject();
-            User existing = userService.getUserByKeycloakId(keycloakId);
-
-            String validationError = validateRoleSpecificFields(existing.getRole(), dto);
-            if (validationError != null) {
-                return ResponseEntity.badRequest().body(Map.of("error", validationError));
-            }
-
             User user = userService.completeProfile(keycloakId, dto);
             return ResponseEntity.ok(Map.of(
                     "message", "Profil complété",
-                    "role", user.getRole() != null ? user.getRole().name() : "NON_DEFINI"
+                    "role", user.getRole().name(),
+                    "profileComplete", user.isProfileComplete()
             ));
         } catch (RuntimeException e) {
             log.error("Erreur complete-profile : {}", e.getMessage());
@@ -79,26 +115,11 @@ public class UserCommunController {
         }
     }
 
-    /**
-     * Certains champs n'ont de sens que pour certains rôles :
-     * - EMPLOYEE / CANDIDAT : parcours d'études attendu (spécialité, niveau).
-     * - RH : ces champs restent optionnels, non pertinents pour son activité.
-     * Retourne un message d'erreur si la règle n'est pas respectée, null sinon.
-     */
-    private String validateRoleSpecificFields(Role role, UpdateUSerAfterConnect dto) {
-        if (role == null) {
-            return null; // rôle pas encore assigné (ex: premier passage Google) : pas de règle à appliquer
-        }
-
-        if (role == Role.EMPLOYEE || role == Role.CANDIDAT) {
-            boolean missingSpecialite = dto.getSpecialiteEtude() == null || dto.getSpecialiteEtude().isBlank();
-            boolean missingNiveau = dto.getNiveauEtude() == null || dto.getNiveauEtude().isBlank();
-
-            if (missingSpecialite || missingNiveau) {
-                return "La spécialité et le niveau d'étude sont requis pour votre rôle.";
-            }
-        }
-
-        return null;
+    @GetMapping("/me/profile-complete")
+    public ResponseEntity<?> profileComplete(@AuthenticationPrincipal Jwt jwt) {
+        User user = this.userFinderService.getUserByKeycloakId(jwt.getSubject());
+        return ResponseEntity.ok(Map.of("complete", user.isProfileComplete()));
     }
+
+
 }

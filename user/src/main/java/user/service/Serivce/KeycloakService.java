@@ -14,33 +14,61 @@ import user.service.Dto.AuthResponse;
 import user.service.Dto.LoginRequest;
 import user.service.Dto.RegisterRequest;
 import user.service.Dto.UpdateUSerAfterConnect;
+import user.service.Entity.User;
+import user.service.Repository.UserRepository;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class KeycloakService {
-
+    private final UserRepository userRepository;
+    private final UserFinderService userFinderService;
+    private final RestTemplate restTemplate;
     @Value("${keycloak.server-url}")
     private String serverUrl;
-
     @Value("${keycloak.realm}")
     private String realm;
-
     @Value("${keycloak.client-id}")
     private String clientId;
-
     @Value("${keycloak.client-secret}")
     private String clientSecret;
-
     @Value("${keycloak.admin-username}")
     private String adminUsername;
-
     @Value("${keycloak.admin-password}")
     private String adminPassword;
 
-    private final RestTemplate restTemplate;
+    public void changePassword(String keycloakId, String newPassword) {
+        String adminToken = getAdminToken();
+        User user1 = this.userFinderService.getUserByKeycloakId(keycloakId);
+
+        String url = serverUrl + "/admin/realms/" + realm
+                + "/users/" + keycloakId + "/reset-password";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(adminToken);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("type", "password");
+        body.put("value", newPassword);
+        body.put("temporary", false);
+
+        restTemplate.exchange(
+                url,
+                HttpMethod.PUT,
+                new HttpEntity<>(body, headers),
+                Void.class
+        );
+
+        assert user1 != null;
+        System.out.println("password change de " + user1.getNom() + user1.getPrenom() + user1.getId());
+        log.info(" Password changé pour {}", keycloakId);
+    }
 
     private String getAdminToken() {
         String url = serverUrl + "/realms/master/protocol/openid-connect/token";
@@ -59,7 +87,8 @@ public class KeycloakService {
         try {
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     url, HttpMethod.POST, request,
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    }
             );
             Map<String, Object> responseBody = response.getBody();
             if (responseBody == null || !responseBody.containsKey("access_token")) {
@@ -123,7 +152,8 @@ public class KeycloakService {
 
             ResponseEntity<Map<String, Object>> roleResponse = restTemplate.exchange(
                     roleUrl, HttpMethod.GET, new HttpEntity<>(headers),
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    }
             );
             Map<String, Object> roleInfo = Objects.requireNonNull(roleResponse.getBody());
 
@@ -166,7 +196,8 @@ public class KeycloakService {
         try {
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     url, HttpMethod.POST, request,
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    }
             );
             Map<String, Object> tokenData = Objects.requireNonNull(response.getBody());
 
@@ -201,7 +232,8 @@ public class KeycloakService {
         try {
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     url, HttpMethod.POST, request,
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    }
             );
             return Objects.requireNonNull(response.getBody());
         } catch (HttpClientErrorException e) {
@@ -226,23 +258,39 @@ public class KeycloakService {
         }
     }
 
-    // Note : on ne touche plus à la DB ici (pas de UserRepository).
-    // Cette classe ne doit gérer QUE les appels vers Keycloak.
-    public void changePassword(String keycloakId, String newPassword) {
-        String adminToken = getAdminToken();
-        String url = serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId + "/reset-password";
+    /**
+     * Vérifie que le mot de passe actuel est correct en tentant un login Keycloak.
+     * Lève une exception si le mot de passe est incorrect.
+     */
+    public void verifyCurrentPassword(String email, String currentPassword) {
+        String url = serverUrl + "/realms/" + realm + "/protocol/openid-connect/token";
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("type", "password");
-        body.put("value", newPassword);
-        body.put("temporary", false);
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "password");
+        body.add("client_id", clientId);
+        body.add("client_secret", clientSecret);
+        body.add("username", email);
+        body.add("password", currentPassword);
+        body.add("scope", "openid");
 
-        restTemplate.exchange(url, HttpMethod.PUT, new HttpEntity<>(body, headers), Void.class);
-        log.info("Password changé pour {}", keycloakId);
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+
+        try {
+            restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    request,
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    }
+            );
+            // Si aucune exception → mot de passe correct
+        } catch (HttpClientErrorException e) {
+            log.warn("Échec vérification mot de passe actuel pour {}", email);
+            throw new RuntimeException("Mot de passe actuel incorrect");
+        }
     }
 
     public void sendResetPasswordEmail(String keycloakId) {
@@ -266,7 +314,8 @@ public class KeycloakService {
 
         ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
                 url, HttpMethod.GET, new HttpEntity<>(headers),
-                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                }
         );
 
         List<Map<String, Object>> users = response.getBody();

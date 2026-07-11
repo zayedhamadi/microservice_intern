@@ -1,11 +1,9 @@
 package user.service.Dto;
 
-
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import user.service.Entity.Enum.Genre;
 import user.service.Entity.Enum.Role;
-
 
 import java.time.LocalDate;
 
@@ -21,11 +19,13 @@ public class UpdateUSerAfterConnect {
 
     Role role;
     Genre genre;
-    String adresse, nom, prenom, description;
     LocalDate dateNaissance;
-    Integer num_Tel;
-    String email, imageBase64, linkedin, twitter, siteweb, specialiteEtude, universiteEtude, niveauEtude;
 
-    Integer anneesExperience;
+    String adresse, nom, prenom, description,
+            email, imageBase64, linkedin, twitter, siteweb,
+            specialiteEtude, universiteEtude, niveauEtude, cvBase64;
+
+    Integer num_Tel, anneesExperience;
+
 
 }

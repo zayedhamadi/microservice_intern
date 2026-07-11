@@ -19,6 +19,7 @@ public class UserFinderService {
         return repository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("Utilisateur introuvable : " + email));
     }
+    
 
     public User byNumTem(Integer num) {
         return repository.findByNumTel(num)
@@ -29,5 +30,13 @@ public class UserFinderService {
     public User byId(Long id) {
         return repository.findById(id)
                 .orElseThrow(() -> new UsernameNotFoundException("Utilisateur introuvable : " + id));
+    }
+    public boolean existsByEmail(String email) {
+        return repository.existsByEmail(email);
+    }
+
+    public User getUserByKeycloakId(String keycloakId) {
+        return repository.findByKeycloakId(keycloakId)
+                .orElseThrow(() -> new RuntimeException("User non trouvé avec keycloakId : " + keycloakId));
     }
 }
