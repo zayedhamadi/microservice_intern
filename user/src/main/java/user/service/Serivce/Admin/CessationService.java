@@ -16,14 +16,13 @@ import user.service.Repository.UserRepository;
 import user.service.Serivce.UserCommun.UserFinderService;
 import user.service.Serivce.WebSocket.AdminRealtimeService;
 
-
 import java.time.LocalDate;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-public class CessationService  {
+public class CessationService {
 
     UserRepository userRepository;
     CessationRepository cessationRepository;
@@ -31,10 +30,13 @@ public class CessationService  {
     AdminRealtimeService realtimeService;
     UserFinderService userFinderService;
 
-
     @Transactional
     public void cesserUser(Long userId, CessationDTO dto) {
         User user = this.userFinderService.byId(userId);
+
+        if (user.getEtatCompte() == Compte.INACTIF) {
+            throw new RuntimeException("Ce compte est déjà inactif.");
+        }
 
         Cessation cessation = Cessation.builder()
                 .motifCessation(dto.getMotifCessation())
@@ -45,17 +47,14 @@ public class CessationService  {
         user.setCessation(cessation);
         user.setEtatCompte(Compte.INACTIF);
         userRepository.save(user);
-//        try {
-//            realtimeService.notifyCessation(user.getPrenom(), user.getNom(),
-//                    dto.getMotifCessation());
-//        } catch (Exception e) {
-//            log.warn("WS notify cessation échoué : {}", e.getMessage());
-//        }
-        userEmailService.sendCessationEmail(
-                user.getEmail(),
-                user.getPrenom(),
-                dto.getMotifCessation()
-        );
+
+        try {
+            realtimeService.notifyCessation(user.getPrenom(), user.getNom(), dto.getMotifCessation());
+        } catch (Exception e) {
+            log.warn("WS notify cessation échoué : {}", e.getMessage());
+        }
+
+        userEmailService.sendCessationEmail(user.getEmail(), user.getPrenom(), dto.getMotifCessation());
         log.info("Compte {} cessé. Motif : {}", userId, dto.getMotifCessation());
     }
 
@@ -63,21 +62,22 @@ public class CessationService  {
     public void reactiverUser(Long userId) {
         User user = this.userFinderService.byId(userId);
 
-        if (user.getCessation() != null) {
-            Cessation c = user.getCessation();
-            cessationRepository.save(c);
+        if (user.getEtatCompte() == Compte.ACTIF) {
+            throw new RuntimeException("Ce compte est déjà actif.");
         }
-//        try {
-//        realtimeService.notifyReactivation(user.getPrenom(), user.getNom());
-//    } catch (Exception e) {
-//        log.warn("WS notify reactivation échoué : {}", e.getMessage());
-//    }
+
+
+
         user.setEtatCompte(Compte.ACTIF);
         userRepository.save(user);
-        userEmailService.sendReactivationEmail(
-                user.getEmail(),
-                user.getPrenom()
-        );
-        log.info("Compte {} réactivé. Motif : {}", userId);
+
+        try {
+            realtimeService.notifyReactivation(user.getPrenom(), user.getNom());
+        } catch (Exception e) {
+            log.warn("WS notify reactivation échoué : {}", e.getMessage());
+        }
+
+        userEmailService.sendReactivationEmail(user.getEmail(), user.getPrenom());
+        log.info("Compte {} réactivé.", userId);
     }
 }

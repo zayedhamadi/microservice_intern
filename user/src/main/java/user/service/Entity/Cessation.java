@@ -1,21 +1,20 @@
 package user.service.Entity;
 
-
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
+@Entity
 @Getter
 @Setter
 @Builder
-@Entity
 @NoArgsConstructor
 @AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
-@Table(name = "cessations")
 public class Cessation {
 
     @Id
@@ -26,6 +25,10 @@ public class Cessation {
 
     LocalDate dateCessation;
 
+    @Column(name = "motif_of_activer_compte")
+    String motifReactivation;
+
     @OneToMany(mappedBy = "cessation", fetch = FetchType.LAZY)
-    List<User> users;
+    @Builder.Default
+    List<User> users = new ArrayList<>();
 }

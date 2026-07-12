@@ -26,11 +26,14 @@ import java.util.Objects;
 
  import user.service.Dto.createUserPerAdminDto;
  import user.service.Entity.Enum.Role;
+import user.service.Serivce.WebSocket.AdminRealtimeService;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class KeycloakService {
+    private final AdminRealtimeService realtimeService;
+
     private final UserRepository userRepository;
     private final UserFinderService userFinderService;
     private final RestTemplate restTemplate;
@@ -145,7 +148,11 @@ public class KeycloakService {
             String location = Objects.requireNonNull(response.getHeaders().getLocation()).toString();
             String keycloakId = location.substring(location.lastIndexOf("/") + 1);
             log.info("User créé dans Keycloak : {}", keycloakId);
-
+            try {
+                realtimeService.notifyNewUser(prenom, nom, role.name());
+            } catch (Exception e) {
+                log.warn("WS notify newUser échoué : {}", e.getMessage());
+            }
             assignRoleToUser(keycloakId, role.name(), adminToken);
             return keycloakId;
 

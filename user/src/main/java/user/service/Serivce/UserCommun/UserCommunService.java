@@ -22,7 +22,7 @@ public class UserCommunService {
 
     UserRepository userRepository;
     UserFinderService userFinderService;
-    KeycloakService keycloakService; // gère le changement de mdp côté Keycloak
+    KeycloakService keycloakService;
 
     public List<User> getAllUsers() {
         return userRepository.findAll();

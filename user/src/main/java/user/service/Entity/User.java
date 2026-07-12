@@ -94,7 +94,6 @@ public class User {
         return role != null;
     }
 
-    /** true si ce rôle nécessite un CV et un cursus académique. */
     @Transient
     public boolean requiresEtudes() {
         return role == Role.CANDIDAT || role == Role.EMPLOYEE;
@@ -103,25 +102,20 @@ public class User {
     @Transient
     public List<String> getMissingFields() {
         List<String> missing = new ArrayList<>();
-
         if (role == null) {
             missing.add("role");
             return missing;
         }
-
         if (isBlank(nom)) missing.add("nom");
         if (isBlank(prenom)) missing.add("prenom");
         if (isBlank(adresse)) missing.add("adresse");
         if (num_Tel == null) missing.add("num_Tel");
         if (dateNaissance == null) missing.add("dateNaissance");
         if (genre == null) missing.add("genre");
-
         if (requiresEtudes()) {
             if (isBlank(specialiteEtude)) missing.add("specialiteEtude");
             if (niveauEtude == null) missing.add("niveauEtude");
-            // CV volontairement optionnel : on ne bloque pas le profil dessus
         }
-
         return missing;
     }
 

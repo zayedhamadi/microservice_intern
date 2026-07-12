@@ -15,6 +15,7 @@ import user.service.Entity.User;
 import user.service.Repository.UserRepository;
 import user.service.Serivce.FileService;
 import user.service.Serivce.UserCommun.UserFinderService;
+import user.service.Serivce.WebSocket.AdminRealtimeService;
 
 @Slf4j
 @Service
@@ -25,6 +26,7 @@ public class UserService {
     private final KeycloakService keycloakService;
     private final UserFinderService userFinderService;
     private final FileService fileService;
+    private final AdminRealtimeService realtimeService;
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
@@ -55,6 +57,11 @@ public class UserService {
 
         User saved = userRepository.save(user);
         log.info("User sauvegardé en DB, ID : {}", saved.getId());
+        try {
+            realtimeService.notifyNewUser(saved.getPrenom(), saved.getNom(), saved.getRole().name());
+        } catch (Exception e) {
+            log.warn("WS notify newUser échoué : {}", e.getMessage());
+        }
         return saved;
     }
 
@@ -100,7 +107,11 @@ public class UserService {
         response.setId(user.getId());
         response.setKeycloakId(user.getKeycloakId());
         log.info(" done login with user  ", response.getEmail(), response.getRole());
-
+        try {
+            realtimeService.notifyLoginActivity(user.getId(), user.getPrenom(), user.getNom(), "LOGIN", user.getEmail());
+        } catch (Exception e) {
+            log.warn("WS notify login échoué : {}", e.getMessage());
+        }
         return response;
 
     }
