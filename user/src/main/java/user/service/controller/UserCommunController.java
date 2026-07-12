@@ -10,9 +10,9 @@ import org.springframework.web.bind.annotation.*;
 import user.service.Dto.UpdateUSerAfterConnect;
 import user.service.Dto.UpdateUserRequest;
 import user.service.Entity.User;
-import user.service.Serivce.UserCommunService;
-import user.service.Serivce.UserFinderService;
-import user.service.Serivce.UserService;
+import user.service.Serivce.UserCommun.UserCommunService;
+import user.service.Serivce.UserCommun.UserFinderService;
+import user.service.Serivce.Authorization.UserService;
 
 import java.util.List;
 import java.util.Map;

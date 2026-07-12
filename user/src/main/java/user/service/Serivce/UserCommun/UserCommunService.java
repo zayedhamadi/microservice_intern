@@ -1,4 +1,4 @@
-package user.service.Serivce;
+package user.service.Serivce.UserCommun;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +10,7 @@ import user.service.Dto.UpdateUserRequest;
 import user.service.Entity.Enum.Compte;
 import user.service.Entity.User;
 import user.service.Repository.UserRepository;
+import user.service.Serivce.Authorization.KeycloakService;
 
 import java.util.List;
 

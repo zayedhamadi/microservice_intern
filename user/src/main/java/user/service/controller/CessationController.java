@@ -6,7 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import user.service.Dto.CessationDTO;
-import user.service.Serivce.CessationService;
+import user.service.Serivce.Admin.CessationService;
 @Slf4j
 @RestController
 @RequestMapping("/cessation")

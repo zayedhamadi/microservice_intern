@@ -1,4 +1,4 @@
-package user.service.Serivce;
+package user.service.Serivce.Admin;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +13,8 @@ import user.service.Entity.User;
 import user.service.Mail.UserEmailService;
 import user.service.Repository.CessationRepository;
 import user.service.Repository.UserRepository;
+import user.service.Serivce.UserCommun.UserFinderService;
+import user.service.Serivce.WebSocket.AdminRealtimeService;
 
 
 import java.time.LocalDate;

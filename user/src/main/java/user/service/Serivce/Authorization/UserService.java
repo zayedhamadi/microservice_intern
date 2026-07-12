@@ -1,4 +1,4 @@
-package user.service.Serivce;
+package user.service.Serivce.Authorization;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +13,8 @@ import user.service.Entity.Enum.NiveauEtude;
 import user.service.Entity.Enum.Role;
 import user.service.Entity.User;
 import user.service.Repository.UserRepository;
+import user.service.Serivce.FileService;
+import user.service.Serivce.UserCommun.UserFinderService;
 
 @Slf4j
 @Service

@@ -16,9 +16,9 @@ import user.service.Entity.User;
 import user.service.Mail.UserEmailService;
 import user.service.Repository.PasswordResetTokenRepository;
 import user.service.Repository.UserRepository;
-import user.service.Serivce.KeycloakService;
-import user.service.Serivce.TokenBlacklistService;
-import user.service.Serivce.UserService;
+import user.service.Serivce.Authorization.KeycloakService;
+import user.service.Serivce.Authorization.TokenBlacklistService;
+import user.service.Serivce.Authorization.UserService;
 
 import java.time.Instant;
 import java.util.HashMap;

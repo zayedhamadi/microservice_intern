@@ -1,4 +1,4 @@
-package user.service.Serivce;
+package user.service.Serivce.WebSocket;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

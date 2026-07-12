@@ -1,4 +1,4 @@
-package user.service.Serivce;
+package user.service.Serivce.Authorization;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,11 +16,16 @@ import user.service.Dto.RegisterRequest;
 import user.service.Dto.UpdateUSerAfterConnect;
 import user.service.Entity.User;
 import user.service.Repository.UserRepository;
+import user.service.Serivce.UserCommun.UserFinderService;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
+
+ import user.service.Dto.createUserPerAdminDto;
+ import user.service.Entity.Enum.Role;
 
 @Slf4j
 @Service
@@ -101,7 +106,17 @@ public class KeycloakService {
         }
     }
 
+
+
     public String createUserInKeycloak(RegisterRequest dto) {
+        return createUserInKeycloak(dto.getEmail(), dto.getPrenom(), dto.getNom(), dto.getPassword(), dto.getRole());
+    }
+
+    public String createUserInKeycloak(createUserPerAdminDto dto) {
+        return createUserInKeycloak(dto.getEmail(), dto.getPrenom(), dto.getNom(), dto.getPassword(), dto.getRole());
+    }
+
+    private String createUserInKeycloak(String email, String prenom, String nom, String password, Role role) {
         String adminToken = getAdminToken();
         String url = serverUrl + "/admin/realms/" + realm + "/users";
 
@@ -111,14 +126,14 @@ public class KeycloakService {
 
         Map<String, Object> credential = new HashMap<>();
         credential.put("type", "password");
-        credential.put("value", dto.getPassword());
+        credential.put("value", password);
         credential.put("temporary", false);
 
         Map<String, Object> userBody = new HashMap<>();
-        userBody.put("username", dto.getEmail());
-        userBody.put("email", dto.getEmail());
-        userBody.put("firstName", dto.getPrenom());
-        userBody.put("lastName", dto.getNom());
+        userBody.put("username", email);
+        userBody.put("email", email);
+        userBody.put("firstName", prenom);
+        userBody.put("lastName", nom);
         userBody.put("enabled", true);
         userBody.put("emailVerified", true);
         userBody.put("credentials", List.of(credential));
@@ -131,7 +146,7 @@ public class KeycloakService {
             String keycloakId = location.substring(location.lastIndexOf("/") + 1);
             log.info("User créé dans Keycloak : {}", keycloakId);
 
-            assignRoleToUser(keycloakId, dto.getRole().name(), adminToken);
+            assignRoleToUser(keycloakId, role.name(), adminToken);
             return keycloakId;
 
         } catch (HttpClientErrorException e) {
@@ -142,6 +157,47 @@ public class KeycloakService {
             throw new RuntimeException("Erreur Keycloak : " + e.getMessage());
         }
     }
+//    public String createUserInKeycloak(RegisterRequest dto) {
+//        String adminToken = getAdminToken();
+//        String url = serverUrl + "/admin/realms/" + realm + "/users";
+//
+//        HttpHeaders headers = new HttpHeaders();
+//        headers.setContentType(MediaType.APPLICATION_JSON);
+//        headers.setBearerAuth(adminToken);
+//
+//        Map<String, Object> credential = new HashMap<>();
+//        credential.put("type", "password");
+//        credential.put("value", dto.getPassword());
+//        credential.put("temporary", false);
+//
+//        Map<String, Object> userBody = new HashMap<>();
+//        userBody.put("username", dto.getEmail());
+//        userBody.put("email", dto.getEmail());
+//        userBody.put("firstName", dto.getPrenom());
+//        userBody.put("lastName", dto.getNom());
+//        userBody.put("enabled", true);
+//        userBody.put("emailVerified", true);
+//        userBody.put("credentials", List.of(credential));
+//
+//        HttpEntity<Map<String, Object>> request = new HttpEntity<>(userBody, headers);
+//
+//        try {
+//            ResponseEntity<Void> response = restTemplate.postForEntity(url, request, Void.class);
+//            String location = Objects.requireNonNull(response.getHeaders().getLocation()).toString();
+//            String keycloakId = location.substring(location.lastIndexOf("/") + 1);
+//            log.info("User créé dans Keycloak : {}", keycloakId);
+//
+//            assignRoleToUser(keycloakId, dto.getRole().name(), adminToken);
+//            return keycloakId;
+//
+//        } catch (HttpClientErrorException e) {
+//            log.error("Erreur création user Keycloak : {}", e.getResponseBodyAsString());
+//            if (e.getStatusCode() == HttpStatus.CONFLICT) {
+//                throw new RuntimeException("Email déjà utilisé dans Keycloak");
+//            }
+//            throw new RuntimeException("Erreur Keycloak : " + e.getMessage());
+//        }
+//    }
 
     private void assignRoleToUser(String keycloakId, String roleName, String adminToken) {
         try {

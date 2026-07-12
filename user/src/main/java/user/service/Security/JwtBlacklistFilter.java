@@ -9,7 +9,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import user.service.Serivce.TokenBlacklistService;
+import user.service.Serivce.Authorization.TokenBlacklistService;
 
 import java.io.IOException;
 

@@ -35,6 +35,10 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/cessation/**
+            - id: user-service-api-admin
+              uri: lb://USER-SERVICE
+              predicates:
+                - Path=/EmployeeManagementController/**
     loadbalancer:
       cache:
         ttl: 5s          

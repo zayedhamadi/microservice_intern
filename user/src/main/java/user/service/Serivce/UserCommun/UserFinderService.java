@@ -1,4 +1,4 @@
-package user.service.Serivce;
+package user.service.Serivce.UserCommun;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;

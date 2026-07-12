@@ -87,6 +87,8 @@ public class User {
     @JoinColumn(name = "cessation_id")
     Cessation cessation;
 
+    String matricule;
+
     @Transient
     public boolean isRoleAssigned() {
         return role != null;

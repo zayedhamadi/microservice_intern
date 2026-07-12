@@ -1,4 +1,4 @@
-package user.service.Serivce;
+package user.service.Serivce.Authorization;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

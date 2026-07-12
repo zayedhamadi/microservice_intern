@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import user.service.Dto.CertificationDTO;
 import user.service.Entity.User;
 import user.service.Repository.UserRepository;
-import user.service.Serivce.CertificationService;
+import user.service.Serivce.UserCommun.CertificationService;
 
 import java.util.List;
 

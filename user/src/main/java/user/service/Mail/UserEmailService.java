@@ -46,7 +46,25 @@ public class UserEmailService {
             log.error(" Erreur email cessation", e);
         }
     }
+    public void sendAccountCreationEmail(
+            String to,
+            String prenom,
+            String nom,
+            String matricule,
+            String password,
+            String loginUrl
+    ) {
+        String subject = "Votre compte a été créé avec succès 🎉";
+        String html = loadTemplate("templates/account-creation-email.html")
+                .replace("{{prenom}}", prenom)
+                .replace("{{nom}}", nom)
+                .replace("{{matricule}}", matricule)
+                .replace("{{password}}", password)
+                .replace("{{loginUrl}}", loginUrl);
 
+        sendEmail(to, subject, html);
+        log.info("Email de création de compte envoyé à {}", to);
+    }
     public void sendReactivationEmail(String to, String prenom) {
         try {
             String html = loadReactivationTemplate(prenom);
