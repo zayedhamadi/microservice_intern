@@ -83,6 +83,10 @@ public class User {
     @Builder.Default
     List<Certification> certifications = new ArrayList<>();
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cessation_id")
+    Cessation cessation;
+
     @Transient
     public boolean isRoleAssigned() {
         return role != null;

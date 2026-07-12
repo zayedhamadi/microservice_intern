@@ -23,6 +23,43 @@ public class UserEmailService {
         this.fromEmail = fromEmail;
     }
 
+    private String loadReactivationTemplate(String prenom) {
+        return loadTemplate("templates/reactivation-email.html")
+                .replace("{{prenom}}", prenom);
+    }
+
+    private String loadCessationTemplate(String prenom, String motif) {
+        return loadTemplate("templates/cessation-email.html")
+                .replace("{{prenom}}", prenom)
+                .replace("{{motif}}", motif);
+    }
+
+    public void sendCessationEmail(String to, String prenom, String motif) {
+        try {
+            String html = loadCessationTemplate(prenom, motif);
+
+            sendEmail(to, "Votre compte a été désactivé ⚠️", html);
+
+            log.info(" Email cessation envoyé à {}", to);
+
+        } catch (Exception e) {
+            log.error(" Erreur email cessation", e);
+        }
+    }
+
+    public void sendReactivationEmail(String to, String prenom) {
+        try {
+            String html = loadReactivationTemplate(prenom);
+
+            sendEmail(to, "Votre compte est réactivé ", html);
+
+            log.info("Email réactivation envoyé à {}", to);
+
+        } catch (Exception e) {
+            log.error(" Erreur email réactivation", e);
+        }
+    }
+
     public void sendWelcomeEmail(String to, String prenom, String loginUrl) {
         sendEmail(to, "Bienvenue !", loadTemplate("templates/welcome-email.html")
                 .replace("{{prenom}}", prenom)

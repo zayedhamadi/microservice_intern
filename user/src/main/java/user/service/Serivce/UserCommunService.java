@@ -53,29 +53,28 @@ public class UserCommunService {
         if (request.getNum_Tel() != null) user.setNum_Tel(request.getNum_Tel());
         if (request.getGenre() != null) user.setGenre(request.getGenre());
         if (request.getAnneesExperience() != null) user.setAnneesExperience(request.getAnneesExperience());
-
         if (request.getLinkedin() != null) user.setLinkedin(request.getLinkedin());
         if (request.getTwitter() != null) user.setTwitter(request.getTwitter());
         if (request.getSiteweb() != null) user.setSiteweb(request.getSiteweb());
+
+        // --- CV : disponible pour TOUS les rôles, indépendant du cursus académique ---
+        if (request.getCvBase64() != null && !request.getCvBase64().isEmpty()) {
+            try {
+                String base64 = request.getCvBase64();
+                if (base64.contains(",")) base64 = base64.split(",")[1];
+                user.setCvUser(java.util.Base64.getDecoder().decode(base64));
+            } catch (Exception e) {
+                log.error("Erreur décodage CV : {}", e.getMessage());
+                throw new RuntimeException("CV invalide");
+            }
+        }
 
         // --- Champs réservés aux rôles nécessitant un cursus académique (CANDIDAT / EMPLOYEE) ---
         if (user.requiresEtudes()) {
             if (request.getSpecialiteEtude() != null) user.setSpecialiteEtude(request.getSpecialiteEtude());
             if (request.getUniversiteEtude() != null) user.setUniversiteEtude(request.getUniversiteEtude());
             if (request.getNiveauEtude() != null) user.setNiveauEtude(request.getNiveauEtude());
-
-            if (request.getCvBase64() != null && !request.getCvBase64().isEmpty()) {
-                try {
-                    String base64 = request.getCvBase64();
-                    if (base64.contains(",")) base64 = base64.split(",")[1];
-                    user.setCvUser(java.util.Base64.getDecoder().decode(base64));
-                } catch (Exception e) {
-                    log.error("Erreur décodage CV : {}", e.getMessage());
-                    throw new RuntimeException("CV invalide");
-                }
-            }
         } else if (request.getSpecialiteEtude() != null || request.getNiveauEtude() != null) {
-            // Un RH n'a pas de cursus académique côté modèle : on ignore plutôt que d'échouer
             log.warn("Champs d'études ignorés pour {} (rôle {} ne nécessite pas d'études)", keycloakId, user.getRole());
         }
 
