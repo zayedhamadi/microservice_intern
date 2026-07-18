@@ -30,6 +30,17 @@ public class CessationService {
     AdminRealtimeService realtimeService;
     UserFinderService userFinderService;
 
+
+    public void notifyAndEmail(Long userId, String motif) {
+        User user = userFinderService.byId(userId);
+        try {
+            realtimeService.notifyCessation(user.getPrenom(), user.getNom(), motif);
+        } catch (Exception e) {
+            log.warn("WS notify cessation échoué : {}", e.getMessage());
+        }
+        userEmailService.sendCessationEmail(user.getEmail(), user.getPrenom(), motif);
+    }
+
     @Transactional
     public void cesserUser(Long userId, CessationDTO dto) {
         User user = this.userFinderService.byId(userId);
@@ -43,18 +54,12 @@ public class CessationService {
                 .dateCessation(LocalDate.now())
                 .build();
 
-        cessation = cessationRepository.save(cessation);
+        cessation = cessationRepository.saveAndFlush(cessation); // ← flush immédiat
+
         user.setCessation(cessation);
         user.setEtatCompte(Compte.INACTIF);
         userRepository.save(user);
 
-        try {
-            realtimeService.notifyCessation(user.getPrenom(), user.getNom(), dto.getMotifCessation());
-        } catch (Exception e) {
-            log.warn("WS notify cessation échoué : {}", e.getMessage());
-        }
-
-        userEmailService.sendCessationEmail(user.getEmail(), user.getPrenom(), dto.getMotifCessation());
         log.info("Compte {} cessé. Motif : {}", userId, dto.getMotifCessation());
     }
 

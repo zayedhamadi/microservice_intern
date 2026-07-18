@@ -18,7 +18,7 @@ spring:
             - id: user-service-users
               uri: lb://USER-SERVICE
               predicates:
-                - Path=/users/**
+                - Path=/users/**,/cessation/**
             - id: user-service-employees
               uri: lb://USER-SERVICE
               predicates:
@@ -27,14 +27,11 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/api/users/**
-            - id: user-service-api-certifications
+            - id: user-service-api-certifications 
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/certifications/**
-            - id: user-service-api-cessation
-              uri: lb://USER-SERVICE
-              predicates:
-                - Path=/cessation/**
+
             - id: user-service-api-admin
               uri: lb://USER-SERVICE
               predicates:
@@ -45,17 +42,16 @@ spring:
                 - Path=/ws-admin/**
     loadbalancer:
       cache:
-        ttl: 5s          
+        ttl: 5s
       retry:
         enabled: true
         max-retries-on-same-service-instance: 1
         max-retries-on-next-service-instance: 2
         retry-on-all-operations: true
 
+eureka:
   instance:
     prefer-ip-address: true
-
-eureka:
   client:
     service-url:
       defaultZone: http://localhost:${DISCOVERY_PORT:8761}/eureka/

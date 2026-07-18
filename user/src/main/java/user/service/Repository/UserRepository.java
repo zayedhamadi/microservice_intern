@@ -78,6 +78,24 @@ public interface UserRepository extends JpaRepository<User, Long> {
                     "WHERE u.id = :id")
     List<Object[]> findUserDetailById(@Param("id") Long id);
 
+
+
+
+
+
+    @Query(nativeQuery = true, value =
+            "SELECT u.id, u.nom, u.prenom, u.email, u.etat_compte, u.role, " +
+                    "u.date_inscrit, u.image, u.genre, u.adresse, u.description, " +
+                    "u.num_tel, u.date_naissance, u.matricule, u.linkedin, u.twitter, " +
+                    "u.siteweb, u.specialite_etude, u.universite_etude, u.niveau_etude, " +
+                    "u.annees_experience, c.motif_cessation, c.date_cessation, " +
+                    "c.motif_of_activer_compte " +
+                    "FROM users u " +
+                    "LEFT JOIN cessations c ON u.cessation_id = c.id " +
+                    "WHERE u.id = :id")
+    List<Object[]> findUserDetailByIdAdmin(@Param("id") Long id);
+
+
     @Query(nativeQuery = true, value =
             "SELECT genre, COUNT(*) " +
                     "FROM users " +

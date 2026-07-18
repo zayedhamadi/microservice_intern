@@ -64,7 +64,7 @@ public class EmployeeManagementPerAdminController {
         return ResponseEntity.noContent().build();
     }
 
-    // ── Stats ────────────────────────────────────────────────
+
 
     @GetMapping("/stats/monthly-registrations")
     public ResponseEntity<Map<String, List<Integer>>> getMonthlyRegistrations() {
@@ -99,6 +99,19 @@ public class EmployeeManagementPerAdminController {
             return ResponseEntity.notFound().build();
         }
     }
+
+
+
+    @GetMapping("/usersAdmin/{id}")
+    public ResponseEntity<Map<String, Object>> getUserByIddAdmin(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(userStatistics.findUserDetailByIdAdmin(id));
+        } catch (RuntimeException e) {
+            log.warn("Utilisateur admin introuvable ou erreur requête (id={}) : {}", id, e.getMessage(), e);
+            return ResponseEntity.notFound().build();
+        }
+    }
+
 
     @GetMapping("/users/search")
     public ResponseEntity<List<Map<String, Object>>> searchUsers(@RequestParam String q) {

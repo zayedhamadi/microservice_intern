@@ -41,6 +41,7 @@ spring:
           batch_size: 20
         order_inserts: true
         order_updates: true
+        
 
   mail:
     host: ${EMAIL_HOST}
