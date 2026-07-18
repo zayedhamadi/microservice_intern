@@ -1,0 +1,11 @@
+target/
+.mvn/
+*.iml
+.idea/
+.git/
+.gitignore
+*.md
+Dockerfile
+.dockerignore
+logs/
+*.log
