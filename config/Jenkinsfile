@@ -1,0 +1,33 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "stage-config-server"
+        IMAGE_TAG  = "${env.BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'dev',
+                    credentialsId: 'git_ssh',
+                    url: 'https://github.com/zayedhamadi/microservice_intern.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir('config') {
+                    script {
+                        docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success { echo "Build réussi pour config-server #${env.BUILD_NUMBER}" }
+        failure { echo "Échec du pipeline config-server #${env.BUILD_NUMBER}" }
+    }
+}
