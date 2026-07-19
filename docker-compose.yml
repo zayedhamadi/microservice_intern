@@ -5,7 +5,8 @@ networks:
 
 volumes:
   mysql-data:
-  jenkins-data:
+  jenkins_home:
+    external: true
   keycloak-data:
     external: true
     name: keycloak_microservice_stage
@@ -193,16 +194,14 @@ services:
       - stage-network
 
   jenkins:
-    build:
-      context: ./jenkins
-      dockerfile: Dockerfile
+    image: jenkins-with-docker:latest
     container_name: stage_jenkins
     restart: unless-stopped
     ports:
       - "8090:8080"
       - "50000:50000"
     volumes:
-      - jenkins-data:/var/jenkins_home
+      - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - stage-network
