@@ -1,6 +1,7 @@
 networks:
   stage-network:
     driver: bridge
+    name: stage-network
 
 volumes:
   mysql-data:
