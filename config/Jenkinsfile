@@ -14,7 +14,19 @@ pipeline {
                         url: 'https://github.com/zayedhamadi/microservice_intern.git'
             }
         }
-
+        stage('SonarQube Analysis') {
+            steps {
+                dir('gateway') {
+                    script {
+                        docker.image('maven:3.9-eclipse-temurin-21').inside("--network stage-network -v \$HOME/.m2:/root/.m2") {
+                            withSonarQubeEnv('sonarqube') {
+                                sh 'mvn clean verify sonar:sonar -Dsonar.projectKey=stage-gateway'
+                            }
+                        }
+                    }
+                }
+            }
+        }
         stage('Build Docker Image') {
             steps {
                 dir('config') {

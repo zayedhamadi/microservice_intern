@@ -8,6 +8,10 @@ volumes:
   keycloak-data:
     external: true
     name: keycloak_microservice_stage
+  sonar-db-data:
+  sonar-data:
+  sonar-extensions:
+  sonar-logs:
 
 services:
 
@@ -201,3 +205,35 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - stage-network
+
+  sonarqube-db:
+    image: postgres:15-alpine
+    container_name: stage_sonar_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD}
+      POSTGRES_DB: sonar
+    volumes:
+      - sonar-db-data:/var/lib/postgresql/data
+    networks:
+      - stage-network
+
+  sonarqube:
+    image: sonarqube:community
+    container_name: stage_sonarqube
+    restart: unless-stopped
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD}
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonar-data:/opt/sonarqube/data
+      - sonar-extensions:/opt/sonarqube/extensions
+      - sonar-logs:/opt/sonarqube/logs
+    networks:
+      - stage-network
+    depends_on:
+      - sonarqube-db

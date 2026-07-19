@@ -32,6 +32,20 @@ pipeline {
             }
         }
 
+        stage('SonarQube Analysis') {
+            steps {
+                dir('user') {
+                    script {
+                        docker.image('maven:3.9-eclipse-temurin-21').inside("--network stage-network -v \$HOME/.m2:/root/.m2") {
+                            withSonarQubeEnv('sonarqube') {
+                                sh 'mvn sonar:sonar -Dsonar.projectKey=stage-user-service'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 dir('user') {
@@ -41,6 +55,8 @@ pipeline {
                 }
             }
         }
+
+
     }
 
     post {
