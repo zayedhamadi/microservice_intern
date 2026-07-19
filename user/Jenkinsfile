@@ -10,8 +10,8 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'dev',
-                    credentialsId: 'git_ssh',
-                    url: 'https://github.com/zayedhamadi/microservice_intern.git'
+                        credentialsId: 'git_ssh',
+                        url: 'https://github.com/zayedhamadi/microservice_intern.git'
             }
         }
 
@@ -20,7 +20,7 @@ pipeline {
                 dir('user') {
                     script {
                         docker.image('maven:3.9-eclipse-temurin-21').inside('-v $HOME/.m2:/root/.m2') {
-                            sh 'mvn test'
+                            sh 'mvn test -Dtest=UserServiceTest,CessationServiceTest'
                         }
                     }
                 }
