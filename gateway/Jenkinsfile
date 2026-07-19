@@ -14,7 +14,7 @@ pipeline {
                     url: 'https://github.com/zayedhamadi/microservice_intern.git'
             }
         }
-        stage('SonarQube Analysis') {
+        sstage('SonarQube Analysis') {
             steps {
                 dir('gateway') {
                     script {
