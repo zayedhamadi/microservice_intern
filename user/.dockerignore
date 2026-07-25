@@ -1,11 +1,15 @@
-target/
-.mvn/
-*.iml
-.idea/
-.git/
-.gitignore
-*.md
-Dockerfile
-.dockerignore
-logs/
-*.log
+    # A copier dans chaque contexte de build : config/, discovery/, gateway/, user/, recrutement/
+    target/
+    .git
+    .gitignore
+    .mvn
+    *.log
+    .idea
+    *.iml
+    .env
+    .env.*
+
+    # Pour le contexte frontend (Angular)
+    node_modules/
+    dist/
+    .angular/

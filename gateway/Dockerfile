@@ -16,15 +16,18 @@ RUN mvn -B clean package -DskipTests
 # =========================================================
 FROM eclipse-temurin:21-jre-alpine AS runtime
 
+RUN apk add --no-cache wget
+
 RUN addgroup -S spring && adduser -S spring -G spring
-USER spring:spring
 
 WORKDIR /app
-COPY --from=build /build/target/*.jar app.jar
+COPY --from=build --chown=spring:spring /build/target/*.jar app.jar
+
+USER spring:spring
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
   CMD wget -qO- http://localhost:8080/actuator/health | grep -q '"status":"UP"' || exit 1
 
-ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]

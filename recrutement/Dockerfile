@@ -5,7 +5,6 @@ FROM maven:3.9-eclipse-temurin-21 AS build
 
 WORKDIR /build
 
-# Cache des dépendances Maven : copiées seules pour profiter du cache Docker
 COPY pom.xml .
 RUN mvn -B dependency:go-offline
 
@@ -17,10 +16,8 @@ RUN mvn -B clean package -DskipTests
 # =========================================================
 FROM eclipse-temurin:21-jre-alpine AS runtime
 
-# wget nécessaire pour le HEALTHCHECK (non garanti présent selon la variante alpine)
 RUN apk add --no-cache wget
 
-# Utilisateur/groupe non-root dédiés au service
 RUN addgroup -S spring && adduser -S spring -G spring
 
 WORKDIR /app
@@ -28,9 +25,9 @@ COPY --from=build --chown=spring:spring /build/target/*.jar app.jar
 
 USER spring:spring
 
-EXPOSE 8888
+EXPOSE 8082
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
-  CMD wget -qO- http://localhost:8888/actuator/health | grep -q '"status":"UP"' || exit 1
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
+  CMD wget -qO- http://localhost:8082/actuator/health | grep -q '"status":"UP"' || exit 1
 
 ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]

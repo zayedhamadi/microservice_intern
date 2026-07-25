@@ -21,7 +21,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/users")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('CANDIDAT','RH','EMPLOYEE')")
+@PreAuthorize("isAuthenticated()")
 public class UserCommunController {
 
     private final UserService userService;

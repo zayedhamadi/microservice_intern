@@ -1,0 +1,74 @@
+server:
+  port: ${RECRUTEMENT_PORT:8082}
+  shutdown: graceful
+  tomcat:
+    max-http-form-post-size: 20971520
+
+spring:
+  application:
+    name: recrutement-service
+
+  config:
+    import: optional:configserver:http://localhost:${CONFIG_PORT:8888}
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+  data:
+    mongodb:
+      uri: ${MONGO_URI}
+      auto-index-creation: true
+
+  mail:
+    host: ${EMAIL_HOST}
+    port: ${EMAIL_PORT}
+    username: ${EMAIL_USER}
+    password: ${EMAIL_PASSWORD}
+    properties:
+      mail:
+        debug: true
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 200MB
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:${DISCOVERY_PORT:8761}/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,refresh
+  endpoint:
+    health:
+      show-details: always
+    refresh:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    org.springframework.data.mongodb.core: DEBUG
+    org.springframework.security: INFO
+
+user-service:
+  url: ${USER_SERVICE_URL}
