@@ -34,8 +34,7 @@ public class User {
     @Lob
     byte[] image;
 
-    @Lob
-    byte[] cvUser;
+
 
     @Column(unique = true, nullable = false)
     String email;

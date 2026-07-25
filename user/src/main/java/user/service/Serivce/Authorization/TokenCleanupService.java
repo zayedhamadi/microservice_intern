@@ -15,7 +15,6 @@ public class TokenCleanupService {
 
     private final RevokedTokenRepository revokedTokenRepository;
 
-    // Tous les jours à 3h du matin
     @Scheduled(cron = "0 0 3 * * *")
     public void cleanupExpiredTokens() {
         int deleted = revokedTokenRepository.deleteExpiredTokens(LocalDateTime.now());

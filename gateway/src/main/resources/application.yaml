@@ -15,6 +15,10 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/auth/**
+            - id: recrutement-service-cv
+              uri: lb://RECRUTEMENT-SERVICE
+              predicates:
+                - Path=/cv/**
             - id: user-service-users
               uri: lb://USER-SERVICE
               predicates:
@@ -27,7 +31,7 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/api/users/**
-            - id: user-service-api-certifications 
+            - id: user-service-api-certifications
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/certifications/**

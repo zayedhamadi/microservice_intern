@@ -207,21 +207,6 @@ public class UserService {
             user.setImage(decoded);
         }
 
-        // --- 6. CV (PDF, optionnel, seulement pour CANDIDAT/EMPLOYEE) ---
-        if (dto.getCvBase64() != null && !dto.getCvBase64().isBlank()) {
-            if (!user.requiresEtudes()) {
-                throw new RuntimeException("Le CV n'est pas applicable à ce rôle.");
-            }
-            byte[] decoded = fileService.decodeBase64(dto.getCvBase64());
-            if (decoded == null) {
-                throw new RuntimeException("CV Base64 invalide");
-            }
-            if (!fileService.isValidFileSize(decoded, 5L * 1024 * 1024)) {
-                throw new RuntimeException("CV trop volumineux (max 5MB)");
-            }
-            user.setCvUser(decoded);
-        }
-
         User saved = userRepository.save(user);
         log.info("Profil complété pour {} (rôle={})", keycloakId, effectiveRole);
         return saved;

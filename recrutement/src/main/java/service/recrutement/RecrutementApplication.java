@@ -2,10 +2,10 @@ package service.recrutement;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 
 @SpringBootApplication
-//@EnableMongoRepositories(basePackages = "recrutement.repository")
-//@EnableFeignClients
+@EnableFeignClients
 public class RecrutementApplication {
 
 	public static void main(String[] args) {

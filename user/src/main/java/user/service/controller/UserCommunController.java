@@ -64,11 +64,7 @@ public class UserCommunController {
                     + java.util.Base64.getEncoder().encodeToString(user.getImage());
         }
 
-        String cvBase64 = null;
-        if (user.getCvUser() != null && user.getCvUser().length > 0) {
-            cvBase64 = "data:application/pdf;base64,"
-                    + java.util.Base64.getEncoder().encodeToString(user.getCvUser());
-        }
+
 
         return ResponseEntity.ok(Map.ofEntries(
                 Map.entry("id", user.getId()),
@@ -91,7 +87,7 @@ public class UserCommunController {
                 Map.entry("siteweb", user.getSiteweb() != null ? user.getSiteweb() : ""),
                 Map.entry("etatCompte", user.getEtatCompte().name()),
                 Map.entry("imageBase64", imageBase64 != null ? imageBase64 : ""),
-                Map.entry("cvBase64", cvBase64 != null ? cvBase64 : ""),
+
                 Map.entry("profileComplete", user.isProfileComplete()),
                 Map.entry("missingFields", user.getMissingFields()),
                 Map.entry("requiresEtudes", user.requiresEtudes())

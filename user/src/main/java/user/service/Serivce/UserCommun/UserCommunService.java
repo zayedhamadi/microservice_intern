@@ -58,17 +58,7 @@ public class UserCommunService {
         if (request.getTwitter() != null) user.setTwitter(request.getTwitter());
         if (request.getSiteweb() != null) user.setSiteweb(request.getSiteweb());
 
-        // --- CV : disponible pour TOUS les rôles, indépendant du cursus académique ---
-        if (request.getCvBase64() != null && !request.getCvBase64().isEmpty()) {
-            try {
-                String base64 = request.getCvBase64();
-                if (base64.contains(",")) base64 = base64.split(",")[1];
-                user.setCvUser(java.util.Base64.getDecoder().decode(base64));
-            } catch (Exception e) {
-                log.error("Erreur décodage CV : {}", e.getMessage());
-                throw new RuntimeException("CV invalide");
-            }
-        }
+
 
         // --- Champs réservés aux rôles nécessitant un cursus académique (CANDIDAT / EMPLOYEE) ---
         if (user.requiresEtudes()) {

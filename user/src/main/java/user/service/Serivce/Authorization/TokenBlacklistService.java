@@ -22,7 +22,7 @@ public class TokenBlacklistService {
     @Transactional
     public void blacklist(String jti, Instant expiresAt) {
         if (jti == null || expiresAt == null) return;
-        if (revokedTokenRepository.existsByJti(jti)) return; // déjà présent
+        if (revokedTokenRepository.existsByJti(jti)) return;
 
         LocalDateTime expiry = LocalDateTime.ofInstant(expiresAt, ZoneId.systemDefault());
         RevokedToken revoked = RevokedToken.builder()

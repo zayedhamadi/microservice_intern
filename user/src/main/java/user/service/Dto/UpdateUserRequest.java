@@ -36,7 +36,7 @@ public class UpdateUserRequest {
     String specialiteEtude;
     String universiteEtude;
     NiveauEtude niveauEtude;
-    String cvBase64;
+
 
     // --- Mot de passe (optionnel) ---
     String currentPassword;
