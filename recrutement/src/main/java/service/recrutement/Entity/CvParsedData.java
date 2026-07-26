@@ -29,10 +29,13 @@ public class CvParsedData {
     List<String> competences = new ArrayList<>();
 
     @Builder.Default
-    List<String> langues = new ArrayList<>(); // manquait : source du futur languageMatch
+    List<String> langues = new ArrayList<>();
 
     String formation;
+
     String experience;
+    Integer anneesExperience;
+
     String specialite;
     String nomComplet;
     String email;

@@ -19,20 +19,24 @@ public class MlTrainingData {
    @Id
    String idMlTrainingData;
 
-   String applicationId; // maintenant réellement cohérent avec Application.idApplication (String)
+   String applicationId;
 
-   // Features ML
    double skillsMatch;
    double experienceMatch;
+
+   /**
+    * Encodage ordinal du niveau d'étude, cohérent avec NiveauEtude (user-service) :
+    * 0 = LICENCE, 1 = MASTER, 2 = INGENIEUR, 3 = DOCTORAT, 4 = AUTRE
+    */
    int educationLevel;
-   boolean contractMatch;          // binaire → boolean plutôt qu'int, plus clair à la lecture
+
+   boolean contractMatch;
    boolean languageMatch;
-   boolean certificationMatch;     // NOTE : source de vérité = Certification (MySQL, user-service) — nécessitera un appel Feign ou une synchro dédiée au moment de la génération du dataset
+   boolean certificationMatch;
    boolean locationMatch;
    boolean salaryExpectationMatch;
 
-   // Label — résultat réel observé
-   boolean accepted; // 1 = ACCEPTED, 0 = REJECTED → boolean, la conversion 0/1 se fait à l'entraînement, pas dans le modèle de données
+   boolean accepted;
 
    LocalDateTime createdAt;
 }

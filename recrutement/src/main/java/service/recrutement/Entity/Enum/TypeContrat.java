@@ -1,5 +1,10 @@
-    package service.recrutement.Entity.Enum;
+package service.recrutement.Entity.Enum;
 
-    public enum TypeContrat {
-        CDI, CDD, FREELANCE, ALTERNANCE, CIVP, STAGE
-    }
+public enum TypeContrat {
+    CDI,
+    CDD,
+    FREELANCE,
+    ALTERNANCE,
+    CIVP,
+    STAGE
+}

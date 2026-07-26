@@ -38,6 +38,13 @@ public class PosteRecrutement {
     @Builder.Default
     List<String> competencesRequises = new ArrayList<>();
 
+    @Builder.Default
+    List<String> languesRequises = new ArrayList<>();
+
+    Integer anneesExperienceMin;
+
+    String niveauEtudeRequis; // texte volontaire : NiveauEtude vit dans user-service, pas de dépendance cross-service
+
     TypeContrat typeContrat;
 
     @Indexed
@@ -54,15 +61,14 @@ public class PosteRecrutement {
     Integer nombrePostes = 1;
 
     LocalDate datePosteRecrutement;
-    LocalDate dateExperationPosteRecrutement;
+    LocalDate dateExpirationPosteRecrutement;
 
     LocalDateTime dateCreation;
     LocalDateTime dateModification;
 
-    // Dérivé, plus stocké : évite la désynchro entre status et un booléen séparé
     @Transient
     public boolean isOuvert() {
-        return status == StatusPosteRecrutement.OPEN
-                && (dateExperationPosteRecrutement == null || !dateExperationPosteRecrutement.isBefore(LocalDate.now()));
+        return status == StatusPosteRecrutement.OUVERT
+                && (dateExpirationPosteRecrutement == null || !dateExpirationPosteRecrutement.isBefore(LocalDate.now()));
     }
 }

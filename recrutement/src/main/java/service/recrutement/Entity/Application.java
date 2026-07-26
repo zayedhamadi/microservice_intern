@@ -13,11 +13,12 @@ import service.recrutement.Entity.Enum.EtatEntretien;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Document(collection = "applications")
 @CompoundIndexes({
-        // Empêche un candidat de postuler deux fois à la même offre — contrainte au niveau DB, pas juste applicatif
         @CompoundIndex(name = "candidat_poste_unique", def = "{'candidatKeycloakId': 1, 'posteRecrutementId': 1}", unique = true)
 })
 @Getter
@@ -32,51 +33,47 @@ public class Application {
     @Id
     String idApplication;
 
-    // --- Références (pattern keycloakId/String id, jamais d'objet cross-service) ---
     @Indexed
     String candidatKeycloakId;
 
     @Indexed
     String posteRecrutementId;
 
-    // --- Snapshot du CV au moment de la candidature ---
-    // Volontairement une copie, pas une référence vers FileUser : si le candidat change son CV
-    // après coup, le recruteur doit continuer à voir la version qu'il a réellement évaluée.
-    // ATTENTION perf : exclure ce champ des projections de liste (findAll côté RH) pour éviter
-    // de charger les bytes du PDF à chaque affichage de tableau de candidatures.
     byte[] cvSnapshot;
     String cvSnapshotFileName;
 
     byte[] lettreMotivation;
 
-    // --- Infos candidat figées au moment T (affichage rapide sans appel Feign vers user-service) ---
     String nomComplet;
     String email;
     String telephone;
     String specialite;
-    String experience;
     String formation;
 
-    @Builder.Default
-    List<String> competences = new ArrayList<>(); // liste, pas texte brut — cohérent avec CvParsedData, exploitable pour le matching IA
+    String experience;
+    Integer anneesExperienceCandidat;
 
     @Builder.Default
-    List<String> langues = new ArrayList<>(); // manquait : nécessaire pour le futur languageMatch dans MlTrainingData
+    List<String> competences = new ArrayList<>();
+
+    @Builder.Default
+    List<String> langues = new ArrayList<>();
 
     @Indexed
     ApplicationStatus statut;
 
-    EtatEntretien etatEntretien; // granularité fine du process d'entretien, complémentaire à statut
+    EtatEntretien etatEntretien;
 
     LocalDate dateCandidature;
     LocalDateTime dateDernierChangementStatut;
 
-    // --- Suivi RH ---
     String commentaireRH;
 
     Boolean entretienPlanifie;
     LocalDateTime dateEntretien;
 
-    // --- Réservé au futur module IA de matching ---
     Double scoreMatching;
+
+    @Builder.Default
+    Map<String, Double> scoreDetails = new LinkedHashMap<>();
 }
