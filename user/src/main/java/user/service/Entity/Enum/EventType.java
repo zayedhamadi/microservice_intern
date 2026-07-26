@@ -1,11 +1,12 @@
 package user.service.Entity.Enum;
 
-public enum ActivityType {
+public enum EventType {
+    STATS_UPDATE,
     NEW_USER,
     CESSATION,
     REACTIVATION,
     LOGIN_ACTIVITY,
-    CERTIFICATION,
+    CERTIFICATION ,
     NEW_POSTE,
     NEW_DEPARTEMENT
 }

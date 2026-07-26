@@ -15,24 +15,29 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/auth/**
+
             - id: recrutement-service-cv
               uri: lb://RECRUTEMENT-SERVICE
               predicates:
                 - Path=/cv/**
+
             - id: user-service-users
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/users/**,/cessation/**
+
             - id: user-service-employees
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/api/employees/**
+
             - id: user-service-api-users
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/api/users/**
-            - id: user-service-api-certifications
-              uri: lb://USER-SERVICE
+
+            - id: recrutement-service-certifications
+              uri: lb://RECRUTEMENT-SERVICE
               predicates:
                 - Path=/certifications/**
 
@@ -40,10 +45,17 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/EmployeeManagementController/**
+
             - id: user-service-ws-admin
-              uri: lb:ws://USER-SERVICE
+              uri: lb://USER-SERVICE
               predicates:
                 - Path=/ws-admin/**
+
+            - id: user-service-departements
+              uri: lb://USER-SERVICE
+              predicates:
+                - Path=/api/departements/**
+
     loadbalancer:
       cache:
         ttl: 5s

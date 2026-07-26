@@ -6,24 +6,31 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@Document(collection = "fileUser")
+@Document(collection = "certifications")
 @Getter
 @Setter
 @Builder
-@FieldDefaults(level = AccessLevel.PRIVATE)
 @NoArgsConstructor
 @AllArgsConstructor
-public class FileUser {
+@FieldDefaults(level = AccessLevel.PRIVATE)
+public class Certification {
 
     @Id
-    String idFileUser;
+    String idCertification;
 
-    @Indexed(unique = true)
+    @Indexed
     String keycloakId;
 
-    byte[] cvUser;
-    String cvFileName;
-    LocalDateTime uploadedAt;
+    String titre;
+    String description;
+
+    @Builder.Default
+    LocalDate dateCertif = LocalDate.now();
+
+    byte[] pdfCertif;
+
+    LocalDateTime createdAt;
 }

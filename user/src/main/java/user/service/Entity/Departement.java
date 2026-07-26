@@ -1,5 +1,5 @@
 package user.service.Entity;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -10,31 +10,20 @@ import java.time.LocalDate;
 @Entity
 @Getter
 @Setter
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class Certification {
+@Builder
+@Table(name = "departements")
+public class Departement {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    Long idCertification;
-
-    String titre;
-
-    @Column(columnDefinition = "TEXT")
+    Long id;
+    @Column(nullable = false, unique = true)
+    String nom;
     String description;
-
     @CreationTimestamp
     @Column(updatable = false)
-    LocalDate dateCertif;
-
-    @Lob
-    @Column(columnDefinition = "LONGBLOB")
-    byte[] pdfCertif;
-
-    @JsonIgnore
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    User user;
+    LocalDate dateCreation;
 }

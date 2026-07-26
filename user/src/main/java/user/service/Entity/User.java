@@ -77,10 +77,7 @@ public class User {
     @Builder.Default
     Compte etatCompte = Compte.ACTIF;
 
-    @JsonIgnore
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default
-    List<Certification> certifications = new ArrayList<>();
+
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cessation_id")
