@@ -11,7 +11,7 @@ import service.recrutement.Service.PosteRecrutementService;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/postesRecrutement")
+@RequestMapping("/rh/api/postesRecrutement")
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('EMPLOYEE','RH')")
 public class PosteRecrutementController {

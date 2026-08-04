@@ -56,6 +56,12 @@ spring:
               predicates:
                 - Path=/api/departements/**
 
+            - id: recrutement-service-postes
+              uri: lb://RECRUTEMENT-SERVICE
+              predicates:
+                - Path=/rh/api/postesRecrutement/**
+
+
     loadbalancer:
       cache:
         ttl: 5s

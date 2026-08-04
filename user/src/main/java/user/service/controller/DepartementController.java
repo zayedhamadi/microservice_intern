@@ -10,7 +10,7 @@ import user.service.Entity.Departement;
 import user.service.Serivce.DepartementService;
 
 import java.util.List;
-@PreAuthorize("hasAnyRole('EMPLOYEE')")
+@PreAuthorize("hasAnyRole('EMPLOYEE','RH')")
 @RestController
 @RequestMapping("/api/departements")
 @RequiredArgsConstructor

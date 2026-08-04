@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import service.recrutement.Controller.UserNotificationClient;
+import service.recrutement.Client.UserNotificationClient;
 import service.recrutement.Entity.Certification;
 import service.recrutement.Entity.dto.CertificationDto;
 import service.recrutement.Repository.CertificationRepository;

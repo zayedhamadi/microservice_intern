@@ -1,4 +1,4 @@
-package service.recrutement.Controller;
+package service.recrutement.Client;
 
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
