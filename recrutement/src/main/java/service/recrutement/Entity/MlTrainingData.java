@@ -3,11 +3,12 @@ package service.recrutement.Entity;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
 
+
+import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.LocalDateTime;
 
-@Document(collection = "mlTrainingData")
+@Document(collection = "MlTrainingData")
 @Getter
 @Setter
 @NoArgsConstructor

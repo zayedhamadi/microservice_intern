@@ -1,4 +1,5 @@
 package service.recrutement.Security;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -9,7 +10,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import service.recrutement.Client.UserServiceClient;
+import service.recrutement.Client.TokenBlacklistClient;
 
 import java.io.IOException;
 
@@ -18,7 +19,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class JwtBlacklistFilter extends OncePerRequestFilter {
 
-    private final UserServiceClient userServiceClient;
+    private final TokenBlacklistClient tokenBlacklistClient;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -30,7 +31,7 @@ public class JwtBlacklistFilter extends OncePerRequestFilter {
         if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
             String jti = jwt.getId();
             try {
-                if (userServiceClient.isTokenBlacklisted(jti)) {
+                if (tokenBlacklistClient.isTokenBlacklisted(jti)) {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     response.setContentType("application/json");
                     response.getWriter().write("{\"error\":\"Token révoqué, veuillez vous reconnecter.\"}");

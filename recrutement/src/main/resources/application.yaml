@@ -72,3 +72,7 @@ logging:
 
 user-service:
   url: ${USER_SERVICE_URL}
+
+app:
+  frontend:
+    url: ${FRONTEND_URL:http://localhost:4200}

@@ -3,13 +3,14 @@ package user.service.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import user.service.Dto.DepartementDTO;
 import user.service.Entity.Departement;
 import user.service.Serivce.DepartementService;
 
 import java.util.List;
-
+@PreAuthorize("hasAnyRole('EMPLOYEE')")
 @RestController
 @RequestMapping("/api/departements")
 @RequiredArgsConstructor

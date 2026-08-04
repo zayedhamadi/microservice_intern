@@ -43,7 +43,7 @@ public class PosteRecrutement {
 
     Integer anneesExperienceMin;
 
-    String niveauEtudeRequis; // texte volontaire : NiveauEtude vit dans user-service, pas de dépendance cross-service
+    String niveauEtudeRequis;
 
     TypeContrat typeContrat;
 
@@ -55,10 +55,13 @@ public class PosteRecrutement {
     String lieu;
 
     Long salaire;
-    String devise; // "TND", "EUR"... ne pas figer une seule devise en dur
 
     @Builder.Default
     Integer nombrePostes = 1;
+
+
+    @Indexed
+    String departementNom;
 
     LocalDate datePosteRecrutement;
     LocalDate dateExpirationPosteRecrutement;

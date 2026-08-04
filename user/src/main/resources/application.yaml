@@ -41,7 +41,6 @@ spring:
           batch_size: 20
         order_inserts: true
         order_updates: true
-        
 
   mail:
     host: ${EMAIL_HOST}
@@ -62,8 +61,7 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
-
-  #          issuer-uri: ${KEYCLOAK_ISSUER_URI}
+          #          issuer-uri: ${KEYCLOAK_ISSUER_URI}
 
   servlet:
     multipart:
@@ -88,7 +86,6 @@ eureka:
       defaultZone: http://localhost:${DISCOVERY_PORT:8761}/eureka/
     register-with-eureka: true
     fetch-registry: true
-
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${server.port}
@@ -98,7 +95,6 @@ management:
     web:
       exposure:
         include: health,info,refresh
-
   endpoint:
     health:
       show-details: always
@@ -107,7 +103,7 @@ management:
 
 logging:
   level:
-    root: INFO
+    root: info
     org.hibernate.SQL: DEBUG
     org.hibernate.orm.jdbc.bind: WARN
     org.springframework.security: INFO

@@ -1,4 +1,4 @@
-package service.recrutement.Client;
+package service.recrutement.Service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,6 +9,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import service.recrutement.Entity.dto.CandidatDto;
 import service.recrutement.Entity.dto.DepartementDto;
+
 
 import java.util.Collections;
 import java.util.List;
@@ -26,6 +27,27 @@ public class UserServiceClient {
         this.userServiceUrl = userServiceUrl;
     }
 
+
+    public boolean isTokenBlacklisted(String jti) {
+        try {
+            ResponseEntity<Boolean> response = restTemplate.getForEntity(
+                    userServiceUrl + "/api/auth/blacklist/{jti}",
+                    Boolean.class,
+                    jti
+            );
+            Boolean body = response.getBody();
+            return body != null && body;
+        } catch (HttpClientErrorException.NotFound e) {
+            // jti non trouvé dans la blacklist => token valide
+            return false;
+        } catch (Exception e) {
+            log.error("Erreur lors de la vérification blacklist (jti {})", jti, e);
+            throw e;
+        }
+    }
+
+
+
     public DepartementDto getDepartementByNom(String nom) {
         try {
             ResponseEntity<DepartementDto> response = restTemplate.getForEntity(
@@ -42,6 +64,11 @@ public class UserServiceClient {
         }
     }
 
+    /**
+     * Récupère la liste des utilisateurs ayant le rôle CANDIDAT, pour notification email.
+     * ADAPTE le chemin ci-dessous si l'endpoint réel de user-service diffère
+     * (ex : /api/utilisateurs/role/CANDIDAT, /api/candidats, etc.).
+     */
     public List<CandidatDto> getAllCandidats() {
         try {
             ResponseEntity<CandidatDto[]> response = restTemplate.exchange(
