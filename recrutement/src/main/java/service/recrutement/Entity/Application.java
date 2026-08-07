@@ -39,16 +39,17 @@ public class Application {
     @Indexed
     String posteRecrutementId;
 
+    // Snapshot du CV au moment de la candidature (immuable même si le candidat
+    // met à jour son CV par défaut plus tard — traçabilité).
     byte[] cvSnapshot;
     String cvSnapshotFileName;
+    String cvSnapshotContentType;
 
-    byte[] lettreMotivation;
+    // Lettre de motivation texte libre (chemin principal du formulaire Angular)
+    String lettreMotivationTexte;
 
-    String nomComplet;
-    String email;
-    String telephone;
-    String specialite;
-    String formation;
+    Double scoreMatching;
+    String nomComplet, email, telephone, specialite, formation, commentaireRH;
 
     String experience;
     Integer anneesExperienceCandidat;
@@ -67,13 +68,12 @@ public class Application {
     LocalDate dateCandidature;
     LocalDateTime dateDernierChangementStatut;
 
-    String commentaireRH;
-
     Boolean entretienPlanifie;
     LocalDateTime dateEntretien;
 
-    Double scoreMatching;
-
     @Builder.Default
     Map<String, Double> scoreDetails = new LinkedHashMap<>();
+
+    @Builder.Default
+    List<StatusChange> historiqueStatuts = new ArrayList<>();
 }

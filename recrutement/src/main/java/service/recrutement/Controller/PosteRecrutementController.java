@@ -13,7 +13,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/rh/api/postesRecrutement")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('EMPLOYEE','RH')")
+@PreAuthorize("hasAnyRole('EMPLOYEE','RH','CANDIDAT')")
 public class PosteRecrutementController {
 
     private final PosteRecrutementService posteRecrutementService;
