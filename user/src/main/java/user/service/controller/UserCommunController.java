@@ -44,8 +44,6 @@ public class UserCommunController {
     }
     @GetMapping("/me/full-profile")
     public ResponseEntity<?> getMyFullProfile(@AuthenticationPrincipal Jwt jwt) {
-        // TODO: brancher les vrais services Poste / Département / Responsable / PositionHistory
-        // quand ils existeront. Ce stub évite le 500 (NoResourceFoundException) en attendant.
         User user = this.userFinderService.getUserByKeycloakId(jwt.getSubject());
         return ResponseEntity.ok(Map.of(
                 "departementActuel", Map.of(),

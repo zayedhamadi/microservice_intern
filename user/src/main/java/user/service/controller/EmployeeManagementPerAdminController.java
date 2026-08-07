@@ -50,7 +50,6 @@ public class EmployeeManagementPerAdminController {
         }
     }
 
-    // ── Activités ────────────────────────────────────────────
 
     @GetMapping("/activities")
     public ResponseEntity<List<Map<String, Object>>> getActivities(

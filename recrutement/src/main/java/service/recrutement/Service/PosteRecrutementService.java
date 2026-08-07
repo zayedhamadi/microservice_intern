@@ -12,8 +12,10 @@ import service.recrutement.Entity.dto.PosteRecrutementDto;
 import service.recrutement.Mail.RecrutementMail;
 import service.recrutement.Repository.PosteRecrutementRepository;
 
+import javax.swing.text.html.Option;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Slf4j
@@ -23,6 +25,19 @@ public class PosteRecrutementService {
     private final PosteRecrutementRepository posteRecrutementRepository;
     private final UserServiceClient userServiceClient;
     private final RecrutementMail recrutementMail;
+
+
+    public List<PosteRecrutement> getAllPostes() {
+        try {
+
+            return this.posteRecrutementRepository.findAll();
+
+        } catch (Exception e) {
+            log.error(e.getMessage());
+            throw e;
+        }
+    }
+
 
     public PosteRecrutement getById(String id) {
         try {
@@ -54,7 +69,6 @@ public class PosteRecrutementService {
                 throw new RuntimeException("Le département du poste est obligatoire");
             }
 
-            // Nettoyage des espaces en début/fin pour éviter un mismatch avec user-service
             String departementNom = posteDto.getDepartementNom().trim();
 
             DepartementDto departement = userServiceClient.getDepartementByNom(departementNom);
@@ -124,6 +138,46 @@ public class PosteRecrutementService {
         } catch (Exception e) {
             log.error(e.getMessage());
             throw e;
+        }
+    }
+
+    public PosteRecrutement updatePosteRecrutement(String id,PosteRecrutementDto posteDto) {
+        try {
+            Optional<PosteRecrutement> optionalPosteRecrutement = Optional.ofNullable(this.getById(id));
+
+            if (optionalPosteRecrutement.isEmpty()) {
+                log.error("Poste non trouvé avec l'ID : {}", posteDto.getIdPosteRecrutement());
+                throw new RuntimeException("Poste non trouvé avec l'ID : " + posteDto.getIdPosteRecrutement());
+            }
+
+            PosteRecrutement pr = optionalPosteRecrutement.get();
+
+            pr.setTitre(posteDto.getTitre());
+            pr.setDescription(posteDto.getDescription());
+            pr.setProfilDemandeOfPoste(posteDto.getProfilDemandeOfPoste());
+            pr.setCompetencesRequises(posteDto.getCompetencesRequises());
+            pr.setLanguesRequises(posteDto.getLanguesRequises());
+            pr.setAnneesExperienceMin(posteDto.getAnneesExperienceMin());
+            pr.setNiveauEtudeRequis(posteDto.getNiveauEtudeRequis());
+            pr.setTypeContrat(posteDto.getTypeContrat());
+            pr.setStatus(posteDto.getStatus());
+            pr.setWorkType(posteDto.getWorkType());
+            pr.setLieu(posteDto.getLieu());
+            pr.setSalaire(posteDto.getSalaire());
+            pr.setNombrePostes(posteDto.getNombrePostes());
+            pr.setDepartementNom(posteDto.getDepartementNom());
+            pr.setDatePosteRecrutement(posteDto.getDatePosteRecrutement());
+            pr.setDateExpirationPosteRecrutement(posteDto.getDateExpirationPosteRecrutement());
+
+            pr.setDateModification(LocalDateTime.now());
+
+            log.info("Mise à jour du poste : {}", pr.getTitre());
+
+            return posteRecrutementRepository.save(pr);
+
+        } catch (Exception e) {
+            log.error("Erreur lors de la mise à jour du poste : {}", e.getMessage());
+            throw new RuntimeException("Erreur lors de la mise à jour du poste : " + e.getMessage(), e);
         }
     }
 }

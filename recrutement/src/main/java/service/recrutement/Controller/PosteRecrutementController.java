@@ -18,6 +18,11 @@ public class PosteRecrutementController {
 
     private final PosteRecrutementService posteRecrutementService;
 
+    @GetMapping
+    public ResponseEntity<List<PosteRecrutement>> getAllPostes() {
+        return ResponseEntity.ok(posteRecrutementService.getAllPostes());
+    }
+
     @PostMapping
     public ResponseEntity<PosteRecrutement> createPosteRecrutement(@RequestBody PosteRecrutementDto posteDto) {
         PosteRecrutement created = posteRecrutementService.createPosteRecrutement(posteDto);
@@ -26,14 +31,20 @@ public class PosteRecrutementController {
 
     @GetMapping("/{id}")
     public ResponseEntity<PosteRecrutement> getPosteRecrutementById(@PathVariable String id) {
-        PosteRecrutement poste = posteRecrutementService.getById(id);
-        return ResponseEntity.ok(poste);
+        return ResponseEntity.ok(posteRecrutementService.getById(id));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<PosteRecrutement> updatePosteRecrutement(
+            @PathVariable String id,
+            @RequestBody PosteRecrutementDto posteDto) {
+        PosteRecrutement updated = posteRecrutementService.updatePosteRecrutement(id, posteDto);
+        return ResponseEntity.ok(updated);
     }
 
     @GetMapping("/departement/{departementNom}")
     public ResponseEntity<List<PosteRecrutement>> getPostesByDepartement(@PathVariable String departementNom) {
-        List<PosteRecrutement> postes = posteRecrutementService.getPostesByDepartement(departementNom);
-        return ResponseEntity.ok(postes);
+        return ResponseEntity.ok(posteRecrutementService.getPostesByDepartement(departementNom));
     }
 
     @DeleteMapping("/{id}")
