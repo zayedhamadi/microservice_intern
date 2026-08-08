@@ -21,7 +21,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(CandidatureNotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleNotFound(CandidatureNotFoundException e) {
+    public ResponseEntity<Map<String, Object>> handleCandidatureNotFound(CandidatureNotFoundException e) {
         return build(HttpStatus.NOT_FOUND, e.getMessage());
     }
 
@@ -35,13 +35,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "Vous avez déjà postulé à ce poste");
     }
 
-//    @ExceptionHandler(CvRequisException.class)
-//    public ResponseEntity<Map<String, Object>> handleBadRequest(CvRequisException e) {
-//        return build(HttpStatus.BAD_REQUEST, e.getMessage());
-//    }
+    @ExceptionHandler(CvRequisException.class)
+    public ResponseEntity<Map<String, Object>> handleBadRequest(CvRequisException e) {
+        return build(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
 
     @ExceptionHandler(TransitionStatutInvalideException.class)
-    public ResponseEntity<Map<String, Object>> handleBadRequest(TransitionStatutInvalideException e) {
+    public ResponseEntity<Map<String, Object>> handleTransitionInvalide(TransitionStatutInvalideException e) {
         return build(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 

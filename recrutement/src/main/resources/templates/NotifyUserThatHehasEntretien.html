@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entretien planifié - {{titrePoste}}</title>
+    <style>
+        /* Reset des marges et padding par défaut */
+        body, p, table, tr, td {
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .header {
+            background-color: #b8860b;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .content {
+            padding: 25px;
+            background-color: #ffffff;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-top: 0;
+        }
+
+        .status-badge {
+            display: inline-block;
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        p {
+            margin-bottom: 15px;
+            font-size: 15px;
+        }
+
+        strong {
+            color: #b8860b;
+        }
+
+        .meta-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: #fff;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .meta-table td {
+            padding: 12px 15px;
+            font-size: 14px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .meta-label {
+            color: #555;
+            width: 30%;
+            font-weight: 600;
+            vertical-align: top;
+        }
+
+        .comment-box {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #b8860b;
+            border-radius: 0 6px 6px 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .comment-box strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #b8860b;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 20px 0;
+            font-weight: 600;
+            transition: background-color 0.3s;
+            text-align: center;
+        }
+
+        .button:hover {
+            background-color: #9e6d0a;
+        }
+
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #777;
+            font-size: 12px;
+            padding: 15px 0;
+        }
+
+        /* Responsive */
+        @media screen and (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .content {
+                padding: 15px;
+            }
+
+            .meta-label {
+                width: 40%;
+                font-size: 13px;
+            }
+
+            .meta-table td {
+                padding: 8px 10px;
+                font-size: 13px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>Un entretien vous attend !</h1>
+</div>
+<div class="content">
+    <p>Bonjour <strong>{{prenom}}</strong>,</p>
+
+    <p>Félicitations, votre candidature pour le poste <strong>{{titrePoste}}</strong> passe à l'étape entretien.</p>
+
+    <div class="status-badge">📅 Entretien planifié</div>
+
+    <table class="meta-table">
+        <tr>
+            <td class="meta-label">Date :</td>
+            <td>{{dateEntretien | date:'fullDate'}}</td>
+        </tr>
+        <tr>
+            <td class="meta-label">Lieu / Lien :</td>
+            <td>
+                {{lieuEntretien}}
+                {{#if isOnline}}
+                <br><a href="{{lienVisio}}" style="color: #b8860b; text-decoration: none;">Rejoindre la visioconférence →</a>
+                {{/if}}
+            </td>
+        </tr>
+        <tr>
+            <td class="meta-label">Heure :</td>
+            <td>{{heureEntretien}}</td>
+        </tr>
+        <tr>
+            <td class="meta-label">Recruteur :</td>
+            <td>{{nomRecruteur}}</td>
+        </tr>
+    </table>
+
+    {{#if commentaireRH}}
+    <div class="comment-box">
+        <strong>Message du recruteur :</strong>
+        {{commentaireRH}}
+    </div>
+    {{/if}}
+
+    <p>Merci de confirmer votre disponibilité au plus vite en cliquant sur le bouton ci-dessous.</p>
+
+    <div style="text-align: center;">
+        <a href="{{consulterUrl}}" class="button">Voir les détails de l'entretien</a>
+    </div>
+
+    <p style="margin-top: 20px; font-size: 14px; color: #666;">
+        Si vous avez des questions, n'hésitez pas à nous contacter.
+    </p>
+</div>
+<div class="footer">
+    <p>© 2026 - Supra Technology. Tous droits réservés.</p>
+</div>
+</body>
+</html>

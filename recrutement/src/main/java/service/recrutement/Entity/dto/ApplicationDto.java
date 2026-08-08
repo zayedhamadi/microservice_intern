@@ -1,48 +1,56 @@
 package service.recrutement.Entity.dto;
 
-import lombok.*;
-import lombok.experimental.FieldDefaults;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import service.recrutement.Entity.Enum.ApplicationStatus;
-import service.recrutement.Entity.Enum.EtatEntretien;
+import service.recrutement.Entity.StatusChange;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * DTO de réponse — projection sûre de Application, sans le contenu binaire du CV
- * (pour ne pas alourdir les listes) ni les annotations de persistance Mongo.
+ * NOTE : par rapport à l'ancienne version, `etatEntretien`, `entretienPlanifie`
+ * et `dateEntretien` (uniques, pensés pour un seul entretien) ont été retirés.
+ * L'état détaillé du processus d'entretien vit maintenant dans la collection
+ * Interview (voir InterviewController / GET .../entretiens), et `historiqueStatuts`
+ * donne au candidat une vue chronologique complète de sa candidature.
  */
 @Getter
 @Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-@ToString
-@FieldDefaults(level = AccessLevel.PRIVATE)
 public class ApplicationDto {
-    String idApplication;
-    String candidatKeycloakId;
-    String posteRecrutementId;
+    private String idApplication;
+    private String candidatKeycloakId;
+    private String posteRecrutementId;
 
-    String cvSnapshotFileName;
-    String lettreMotivationTexte;
+    private String cvSnapshotFileName;
+    private String lettreMotivationTexte;
+    private boolean lettreMotivationPdfPresente;
+    private String lettreMotivationPdfFileName;
 
-    String nomComplet, email, telephone, specialite, formation, commentaireRH;
-    String experience;
-    Integer anneesExperienceCandidat;
+    private String nomComplet;
+    private String email;
+    private String telephone;
+    private String specialite;
+    private String formation;
+    private String commentaireRH;
 
-    List<String> competences;
-    List<String> langues;
+    private String experience;
+    private Integer anneesExperienceCandidat;
+    private List<String> competences;
+    private List<String> langues;
 
-    ApplicationStatus statut;
-    EtatEntretien etatEntretien;
+    private ApplicationStatus statut;
 
-    LocalDate dateCandidature;
-    LocalDateTime dateDernierChangementStatut;
+    private LocalDate dateCandidature;
+    private LocalDateTime dateDernierChangementStatut;
 
-    Boolean entretienPlanifie;
-    LocalDateTime dateEntretien;
-
-    Double scoreMatching;
+    private Double scoreMatching;
+    private List<StatusChange> historiqueStatuts;
 }

@@ -39,14 +39,15 @@ public class Application {
     @Indexed
     String posteRecrutementId;
 
-    // Snapshot du CV au moment de la candidature (immuable même si le candidat
-    // met à jour son CV par défaut plus tard — traçabilité).
+
     byte[] cvSnapshot;
     String cvSnapshotFileName;
     String cvSnapshotContentType;
 
-    // Lettre de motivation texte libre (chemin principal du formulaire Angular)
     String lettreMotivationTexte;
+
+    byte[] lettreMotivationPdf;
+    String lettreMotivationPdfFileName;
 
     Double scoreMatching;
     String nomComplet, email, telephone, specialite, formation, commentaireRH;

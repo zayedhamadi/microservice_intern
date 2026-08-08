@@ -4,6 +4,11 @@ server:
   tomcat:
     max-http-form-post-size: 20971520
 
+internal:
+  api:
+    key: ${INTERNAL_API_KEY}
+
+
 spring:
   application:
     name: recrutement-service

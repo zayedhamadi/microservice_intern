@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mise à jour de votre candidature - {{titrePoste}}</title>
+    <style>
+        /* Reset des marges et padding par défaut */
+        body, p, table, tr, td {
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .header {
+            background-color: #1a5fb0;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .content {
+            padding: 25px;
+            background-color: #ffffff;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-top: 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            font-size: 15px;
+        }
+
+        strong {
+            color: #1a5fb0;
+        }
+
+        .status-badge {
+            display: inline-block;
+            background-color: #eaf2ff;
+            color: #1a5fb0;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .comment-box {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #1a5fb0;
+            border-radius: 0 6px 6px 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .comment-box strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #1a5fb0;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 20px 0;
+            font-weight: 600;
+            transition: background-color 0.3s;
+            text-align: center;
+        }
+
+        .button:hover {
+            background-color: #154a8f;
+        }
+
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #777;
+            font-size: 12px;
+            padding: 15px 0;
+        }
+
+        /* Responsive */
+        @media screen and (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .content {
+                padding: 15px;
+            }
+
+            .header h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>Votre profil a retenu notre attention !</h1>
+</div>
+<div class="content">
+    <p>Bonjour <strong>{{prenom}}</strong>,</p>
+
+    <p>Votre candidature pour le poste <strong>{{titrePoste}}</strong> évolue :</p>
+
+    <div class="status-badge">✅ Profil sélectionné</div>
+
+    <p>Notre équipe RH poursuit l'examen de votre dossier. La prochaine étape (entretien) vous sera communiquée prochainement.</p>
+
+    {{#if commentaireRH}}
+    <div class="comment-box">
+        <strong>Commentaire du recruteur :</strong>
+        {{commentaireRH}}
+    </div>
+    {{/if}}
+
+    <div style="text-align: center;">
+        <a href="{{consulterUrl}}" class="button">Suivre ma candidature</a>
+    </div>
+
+    <p style="margin-top: 20px; font-size: 14px; color: #666;">
+        Vous pouvez consulter l'état de votre candidature à tout moment via votre espace personnel.
+    </p>
+</div>
+<div class="footer">
+    <p>© 2026 - Supra Technology. Tous droits réservés.</p>
+</div>
+</body>
+</html>

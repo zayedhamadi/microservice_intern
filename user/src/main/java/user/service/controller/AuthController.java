@@ -19,6 +19,7 @@ import user.service.Repository.UserRepository;
 import user.service.Serivce.Authorization.KeycloakService;
 import user.service.Serivce.Authorization.TokenBlacklistService;
 import user.service.Serivce.Authorization.UserService;
+import user.service.Serivce.UserCommun.UserFinderService;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -38,6 +39,7 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final TokenBlacklistService tokenBlacklistService;
+    private final UserFinderService finderService;
 
     @Value("${keycloak.server-url}")
     private String keycloakUrl;
@@ -139,7 +141,7 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
         try {
-            User user = userService.register(request); // lève déjà l'exception si EMPLOYEE
+            User user = userService.register(request);
             userEmailService.sendWelcomeEmail(user.getEmail(), user.getPrenom(), "http://localhost:4200/login");
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                     "message", "Compte créé avec succès",

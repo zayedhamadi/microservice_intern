@@ -33,7 +33,6 @@ public class FileUserController {
         return ResponseEntity.ok().build();
     }
 
-    // Pour l'affichage dans le profil (jamais d'erreur si absent)
     @GetMapping("/me")
     public ResponseEntity<fileUSerDto> getMyCv(@AuthenticationPrincipal Jwt jwt) {
         return fileUserService.findCv(jwt.getSubject())

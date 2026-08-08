@@ -5,6 +5,7 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import service.recrutement.Entity.Enum.InterviewMode;
 import service.recrutement.Entity.Enum.InterviewResult;
 import service.recrutement.Entity.Enum.InterviewStatus;
 import service.recrutement.Entity.Enum.InterviewType;
@@ -23,7 +24,7 @@ public class Interview {
 
     @Id
     String idInterview;
-
+    InterviewMode mode;
     @Indexed
     String applicationId;
 

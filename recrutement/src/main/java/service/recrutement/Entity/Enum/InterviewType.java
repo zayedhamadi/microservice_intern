@@ -1,6 +1,7 @@
 package service.recrutement.Entity.Enum;
 
 public enum InterviewType {
-    RH,
-    TECHNIQUE
+    RH_INITIAL,
+    TECHNIQUE,
+    RH_FINAL
 }

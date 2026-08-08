@@ -23,13 +23,13 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_URLS = {
             "/auth/register",
-            "/internal/**",
             "/auth/login",
             "/auth/google/url",
             "/auth/google/sync",
             "/auth/google/callback",
             "/auth/forgot-password",
             "/auth/reset-password",
+            "/internal/**",
             "/ws-admin/**",
             "/actuator/**",
             "/v3/api-docs/**",
@@ -41,6 +41,7 @@ public class SecurityConfig {
     JwtAuthConverter jwtAuthConverter;
     UserSyncFilter userSyncFilter;
     JwtBlacklistFilter jwtBlacklistFilter;
+    InternalApiKeyFilter internalApiKeyFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -49,13 +50,13 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_URLS).permitAll()
-                      .requestMatchers("/rh/**").hasAnyRole("RH")
                         .requestMatchers("/cv/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter))
                 )
+                .addFilterBefore(internalApiKeyFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(userSyncFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(jwtBlacklistFilter, UserSyncFilter.class);
 

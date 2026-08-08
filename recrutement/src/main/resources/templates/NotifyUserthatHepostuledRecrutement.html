@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candidature envoyée</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #7c5cff; color: white; padding: 10px; text-align: center; border-radius: 5px; }
+        .content { padding: 20px; background-color: #f9f9f9; border-radius: 5px; margin-top: 20px; }
+        .poste-title { font-size: 20px; font-weight: bold; color: #7c5cff; margin: 0 0 10px 0; }
+        .status-badge { display: inline-block; background-color: #fff3cd; color: #856404; padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: bold; margin: 10px 0; }
+        .button { display: inline-block; padding: 10px 20px; background-color: #7c5cff; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+        .footer { margin-top: 20px; text-align: center; color: #777; font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>Candidature bien reçue !</h1>
+</div>
+<div class="content">
+    <p>Bonjour {{prenom}},</p>
+    <p>Nous confirmons la réception de votre candidature pour le poste :</p>
+    <p class="poste-title">{{titrePoste}}</p>
+    <div class="status-badge">⏳ En attente de traitement</div>
+    <p>Notre équipe RH va examiner votre profil dans les meilleurs délais. Vous recevrez un email à chaque mise à jour du statut de votre candidature.</p>
+    <p>Vous pouvez suivre l'avancement de votre candidature à tout moment :</p>
+    <a href="{{consulterUrl}}" class="button">Suivre ma candidature</a>
+</div>
+<div class="footer">
+    <p>© 2026 - Votre Entreprise</p>
+</div>
+</body>
+</html>
