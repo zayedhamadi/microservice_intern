@@ -25,10 +25,7 @@ public class MlTrainingData {
    double skillsMatch;
    double experienceMatch;
 
-   /**
-    * Encodage ordinal du niveau d'étude, cohérent avec NiveauEtude (user-service) :
-    * 0 = LICENCE, 1 = MASTER, 2 = INGENIEUR, 3 = DOCTORAT, 4 = AUTRE
-    */
+
    int educationLevel;
 
    boolean contractMatch;

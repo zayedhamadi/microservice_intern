@@ -1,4 +1,4 @@
-package service.recrutement.Entity;
+package service.recrutement.Entity.dto;
 
 import lombok.*;
 import lombok.experimental.FieldDefaults;

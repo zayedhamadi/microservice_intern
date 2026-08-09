@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import service.recrutement.Entity.Enum.ApplicationStatus;
 import service.recrutement.Entity.Enum.EtatEntretien;
+import service.recrutement.Entity.dto.StatusChange;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

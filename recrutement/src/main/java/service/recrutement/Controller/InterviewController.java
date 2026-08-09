@@ -10,6 +10,7 @@ import service.recrutement.Entity.Enum.InterviewType;
 import service.recrutement.Entity.dto.InterviewDto;
 import service.recrutement.Entity.dto.PlanifierEntretienDto;
 import service.recrutement.Entity.dto.ResultatEntretienDto;
+import service.recrutement.Security.JwtExtractService;
 import service.recrutement.Service.InterviewService;
 
 import java.util.List;
@@ -20,18 +21,16 @@ import java.util.List;
 public class InterviewController {
 
     private final InterviewService interviewService;
+    private final JwtExtractService jwtExtractService;
 
-    // =========================================================
-    // PLANIFICATION — un endpoint dédié par étape pour que le rôle
-    // Spring Security autorisé corresponde exactement à qui mène l'entretien.
-    // =========================================================
+
 
     @PostMapping("/candidatures/{id}/entretiens/rh-initial")
     @PreAuthorize("hasRole('RH')")
     public ResponseEntity<InterviewDto> planifierEntretienRHInitial(
             @PathVariable String id, @RequestBody PlanifierEntretienDto dto, Authentication authentication) {
         return ResponseEntity.ok(interviewService.planifierEntretien(
-                id, InterviewType.RH_INITIAL, dto, extractKeycloakId(authentication)));
+                id, InterviewType.RH_INITIAL, dto, jwtExtractService.extractKeycloakId(authentication)));
     }
 
     @PostMapping("/candidatures/{id}/entretiens/technique")
@@ -39,7 +38,7 @@ public class InterviewController {
     public ResponseEntity<InterviewDto> planifierEntretienTechnique(
             @PathVariable String id, @RequestBody PlanifierEntretienDto dto, Authentication authentication) {
         return ResponseEntity.ok(interviewService.planifierEntretien(
-                id, InterviewType.TECHNIQUE, dto, extractKeycloakId(authentication)));
+                id, InterviewType.TECHNIQUE, dto, jwtExtractService.extractKeycloakId(authentication)));
     }
 
     @PostMapping("/candidatures/{id}/entretiens/rh-final")
@@ -47,51 +46,28 @@ public class InterviewController {
     public ResponseEntity<InterviewDto> planifierEntretienRHFinal(
             @PathVariable String id, @RequestBody PlanifierEntretienDto dto, Authentication authentication) {
         return ResponseEntity.ok(interviewService.planifierEntretien(
-                id, InterviewType.RH_FINAL, dto, extractKeycloakId(authentication)));
+                id, InterviewType.RH_FINAL, dto, jwtExtractService.extractKeycloakId(authentication)));
     }
 
-    // =========================================================
-    // RÉSULTAT
-    // =========================================================
 
-    /**
-     * RH et EMPLOYEE peuvent tous deux enregistrer un résultat ici ; le service ne
-     * revérifie pas que le rôle de l'appelant correspond au type de l'entretien.
-     * Si tu veux serrer cette règle, ajoute un contrôle dans InterviewService en
-     * comparant interview.getType() au rôle de `authentication` avant d'enregistrer.
-     */
     @PatchMapping("/entretiens/{interviewId}/resultat")
     @PreAuthorize("hasAnyRole('RH', 'EMPLOYEE')")
     public ResponseEntity<InterviewDto> enregistrerResultat(
             @PathVariable String interviewId, @RequestBody ResultatEntretienDto dto, Authentication authentication) {
         return ResponseEntity.ok(interviewService.enregistrerResultat(
-                interviewId, dto, extractKeycloakId(authentication)));
+                interviewId, dto, jwtExtractService.extractKeycloakId(authentication)));
     }
 
-    // =========================================================
-    // CONSULTATION — candidat (sa propre candidature), RH, EMPLOYEE
-    // =========================================================
 
     @GetMapping("/candidatures/{id}/entretiens")
     @PreAuthorize("hasAnyRole('CANDIDAT', 'RH', 'EMPLOYEE')")
     public ResponseEntity<List<InterviewDto>> getEntretiensPourCandidature(
             @PathVariable String id, Authentication authentication) {
-        boolean isRhOuEmployee = hasRole(authentication, "ROLE_RH") || hasRole(authentication, "ROLE_EMPLOYEE");
+        boolean isRhOuEmployee = jwtExtractService.hasRole(authentication, "ROLE_RH") || jwtExtractService.hasRole(authentication, "ROLE_EMPLOYEE");
         return ResponseEntity.ok(interviewService.getEntretiensPourCandidature(
-                id, extractKeycloakId(authentication), isRhOuEmployee));
+                id, jwtExtractService.extractKeycloakId(authentication), isRhOuEmployee));
     }
 
-    // =========================================================
-    // HELPERS
-    // =========================================================
 
-    private String extractKeycloakId(Authentication authentication) {
-        Jwt jwt = (Jwt) authentication.getPrincipal();
-        return jwt.getSubject();
-    }
 
-    private boolean hasRole(Authentication authentication, String role) {
-        return authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals(role));
-    }
 }

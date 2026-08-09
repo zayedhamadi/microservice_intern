@@ -6,19 +6,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import service.recrutement.Entity.Enum.ApplicationStatus;
-import service.recrutement.Entity.StatusChange;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * NOTE : par rapport à l'ancienne version, `etatEntretien`, `entretienPlanifie`
- * et `dateEntretien` (uniques, pensés pour un seul entretien) ont été retirés.
- * L'état détaillé du processus d'entretien vit maintenant dans la collection
- * Interview (voir InterviewController / GET .../entretiens), et `historiqueStatuts`
- * donne au candidat une vue chronologique complète de sa candidature.
- */
+
 @Getter
 @Setter
 @Builder

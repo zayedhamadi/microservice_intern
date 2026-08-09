@@ -8,12 +8,12 @@ import org.springframework.web.multipart.MultipartFile;
 import service.recrutement.Client.UserServiceClient;
 import service.recrutement.Entity.Application;
 import service.recrutement.Entity.Enum.ApplicationStatus;
-import service.recrutement.Entity.PosteRecrutement;
-import service.recrutement.Entity.StatusChange;
 import service.recrutement.Entity.FileUser;
+import service.recrutement.Entity.PosteRecrutement;
 import service.recrutement.Entity.dto.ApplicationDto;
 import service.recrutement.Entity.dto.ApplyRequestDto;
 import service.recrutement.Entity.dto.CandidatDto;
+import service.recrutement.Entity.dto.StatusChange;
 import service.recrutement.Exception.*;
 import service.recrutement.Mail.RecrutementMail;
 import service.recrutement.Repository.ApplicationRepository;
@@ -21,12 +21,7 @@ import service.recrutement.Service.UserCVFile.FileUserService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.EnumMap;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,16 +29,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ApplyService {
 
-    private final ApplicationRepository applicationRepository;
-    private final PosteRecrutementService posteRecrutementService;
-    private final FileUserService fileUserService;
-    private final UserServiceClient userServiceClient;
-    private final RecrutementMail recrutementMail;
-
-    private static final long MAX_CV_SIZE = 5L * 1024 * 1024;
-    private static final long MAX_LETTRE_SIZE = 5L * 1024 * 1024;
-
-
+    private static final long MAX_CV_SIZE = 10L * 1024 * 1024;
+    private static final long MAX_LETTRE_SIZE = 10L * 1024 * 1024;
     private static final Map<ApplicationStatus, Set<ApplicationStatus>> TRANSITIONS_AUTORISEES = new EnumMap<>(ApplicationStatus.class);
 
     static {
@@ -62,6 +49,12 @@ public class ApplyService {
         TRANSITIONS_AUTORISEES.put(ApplicationStatus.RETIRE, EnumSet.noneOf(ApplicationStatus.class));
     }
 
+    private final ApplicationRepository applicationRepository;
+    private final PosteRecrutementService posteRecrutementService;
+    private final FileUserService fileUserService;
+    private final UserServiceClient userServiceClient;
+    private final RecrutementMail recrutementMail;
+
     private void notifyRecruteurNouvelleCandidature(PosteRecrutement poste, Application application) {
         try {
             recrutementMail.sendCandidatureConfirmation(poste, application);
@@ -77,7 +70,6 @@ public class ApplyService {
             String candidatKeycloakId, ApplyRequestDto dto, MultipartFile lettreMotivationPdf) {
 
         PosteRecrutement poste = getPosteOuverOuException(dto.getIdPosteRecrutement());
-        assertPasDeCandidatureExistante(candidatKeycloakId, poste.getIdPosteRecrutement());
 
         FileUser cvExistant = fileUserService.findCv(candidatKeycloakId)
                 .orElseThrow(() -> new CvRequisException(
@@ -85,14 +77,15 @@ public class ApplyService {
 
         CandidatDto candidat = fetchCandidatInfo(candidatKeycloakId);
 
-        Application application = buildBaseApplication(candidatKeycloakId, poste, candidat, dto.getLettreMotivationTexte());
+        Application application = prepareApplicationForSubmission(
+                candidatKeycloakId, poste, candidat, dto.getLettreMotivationTexte());
         application.setCvSnapshot(cvExistant.getCvUser());
         application.setCvSnapshotFileName(cvExistant.getCvFileName());
         application.setCvSnapshotContentType("application/pdf");
 
         attachLettreMotivationPdfSiPresente(application, lettreMotivationPdf);
 
-        return saveNouvelleCandidature(application, poste);
+        return saveCandidature(application, poste);
     }
 
     /** Postuler avec un CV téléversé spécifiquement pour cette candidature. */
@@ -102,12 +95,12 @@ public class ApplyService {
             String lettreMotivationTexte, MultipartFile lettreMotivationPdf) {
 
         PosteRecrutement poste = getPosteOuverOuException(posteId);
-        assertPasDeCandidatureExistante(candidatKeycloakId, poste.getIdPosteRecrutement());
         validateCvFile(cvFile);
 
         CandidatDto candidat = fetchCandidatInfo(candidatKeycloakId);
 
-        Application application = buildBaseApplication(candidatKeycloakId, poste, candidat, lettreMotivationTexte);
+        Application application = prepareApplicationForSubmission(
+                candidatKeycloakId, poste, candidat, lettreMotivationTexte);
         try {
             application.setCvSnapshot(cvFile.getBytes());
         } catch (Exception e) {
@@ -118,7 +111,54 @@ public class ApplyService {
 
         attachLettreMotivationPdfSiPresente(application, lettreMotivationPdf);
 
-        return saveNouvelleCandidature(application, poste);
+        return saveCandidature(application, poste);
+    }
+
+    /**
+     * Retourne le document à sauvegarder pour une nouvelle candidature :
+     * - s'il n'existe aucune candidature du candidat pour ce poste, en crée une nouvelle ;
+     * - si une candidature RETIRE existe déjà (contrainte d'unicité candidat+poste),
+     *   elle est réactivée (repassée à EN_ATTENTE) au lieu de créer un doublon ;
+     * - si une candidature active (tout autre statut) existe déjà, on refuse.
+     */
+    private Application prepareApplicationForSubmission(
+            String candidatKeycloakId, PosteRecrutement poste, CandidatDto candidat, String lettreMotivationTexte) {
+
+        Optional<Application> existante = applicationRepository
+                .findByCandidatKeycloakIdAndPosteRecrutementId(candidatKeycloakId, poste.getIdPosteRecrutement());
+
+        if (existante.isPresent()) {
+            Application application = existante.get();
+
+            if (application.getStatut() != ApplicationStatus.RETIRE) {
+                throw new CandidatureExistanteException();
+            }
+
+            LocalDateTime now = LocalDateTime.now();
+            application.setStatut(ApplicationStatus.EN_ATTENTE);
+            application.setLettreMotivationTexte(lettreMotivationTexte);
+            application.setLettreMotivationPdf(null);
+            application.setLettreMotivationPdfFileName(null);
+            application.setCommentaireRH(null);
+            application.setDateCandidature(LocalDate.now());
+            application.setDateDernierChangementStatut(now);
+
+            if (candidat != null) {
+                application.setNomComplet(candidat.getPrenom() + " " + candidat.getNom());
+                application.setEmail(candidat.getEmail());
+            }
+
+            application.getHistoriqueStatuts().add(StatusChange.builder()
+                    .statut(ApplicationStatus.EN_ATTENTE)
+                    .date(now)
+                    .commentaire("Candidature redéposée par le candidat")
+                    .auteurKeycloakId(candidatKeycloakId)
+                    .build());
+
+            return application;
+        }
+
+        return buildBaseApplication(candidatKeycloakId, poste, candidat, lettreMotivationTexte);
     }
 
     private void attachLettreMotivationPdfSiPresente(Application application, MultipartFile lettreMotivationPdf) {
@@ -140,7 +180,7 @@ public class ApplyService {
             throw new CvRequisException("La lettre de motivation doit être un fichier PDF");
         }
         if (file.getSize() > MAX_LETTRE_SIZE) {
-            throw new CvRequisException("La lettre de motivation ne doit pas dépasser 5 Mo");
+            throw new CvRequisException("La lettre de motivation ne doit pas dépasser 10 Mo");
         }
     }
 
@@ -173,15 +213,60 @@ public class ApplyService {
         return application;
     }
 
-    private ApplicationDto saveNouvelleCandidature(Application application, PosteRecrutement poste) {
+    private ApplicationDto saveCandidature(Application application, PosteRecrutement poste) {
         try {
             Application saved = applicationRepository.save(application);
-            log.info("Nouvelle candidature : candidat={}, poste={}", saved.getCandidatKeycloakId(), poste.getTitre());
+            log.info("Candidature enregistrée : candidat={}, poste={}", saved.getCandidatKeycloakId(), poste.getTitre());
             notifyRecruteurNouvelleCandidature(poste, saved);
             return toDto(saved);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw new CandidatureExistanteException();
         }
+    }
+
+    /**
+     * Modification d'une candidature par son propriétaire — uniquement autorisée
+     * tant qu'elle est EN_ATTENTE (avant toute action du RH).
+     */
+    @Transactional
+    public ApplicationDto modifierCandidature(
+            String idApplication, String candidatKeycloakId, String lettreMotivationTexte,
+            MultipartFile cvFile, MultipartFile lettreMotivationPdf, boolean supprimerLettrePdf) {
+
+        Application application = getApplicationOuException(idApplication);
+
+        if (!application.getCandidatKeycloakId().equals(candidatKeycloakId)) {
+            throw new AccesNonAutoriseException("Cette candidature ne vous appartient pas");
+        }
+        if (application.getStatut() != ApplicationStatus.EN_ATTENTE) {
+            throw new TransitionStatutInvalideException(
+                    "Vous ne pouvez modifier votre candidature que tant qu'elle est en attente");
+        }
+
+        application.setLettreMotivationTexte(lettreMotivationTexte);
+
+        if (cvFile != null && !cvFile.isEmpty()) {
+            validateCvFile(cvFile);
+            try {
+                application.setCvSnapshot(cvFile.getBytes());
+            } catch (Exception e) {
+                throw new CvRequisException("Impossible de lire le fichier CV envoyé");
+            }
+            application.setCvSnapshotFileName(cvFile.getOriginalFilename());
+            application.setCvSnapshotContentType(cvFile.getContentType());
+        }
+
+        if (supprimerLettrePdf) {
+            application.setLettreMotivationPdf(null);
+            application.setLettreMotivationPdfFileName(null);
+        } else if (lettreMotivationPdf != null && !lettreMotivationPdf.isEmpty()) {
+            attachLettreMotivationPdfSiPresente(application, lettreMotivationPdf);
+        }
+
+        application.setDateDernierChangementStatut(LocalDateTime.now());
+        Application saved = applicationRepository.save(application);
+        log.info("Candidature {} modifiée par le candidat {}", idApplication, candidatKeycloakId);
+        return toDto(saved);
     }
 
     /** Retourne (bytes, fileName) — sécurisé : réservé au propriétaire de la candidature ou au RH. */
@@ -231,13 +316,6 @@ public class ApplyService {
         return applicationRepository.countByPosteRecrutementId(posteId);
     }
 
-    /**
-     * Décision manuelle du RH : accepter le dossier (EN_ATTENTE -> SELECTIONNE)
-     * ou le refuser (-> REJETE) à n'importe quelle étape. La progression à travers
-     * les 3 entretiens n'utilise PAS ce point d'entrée : elle est pilotée par
-     * InterviewService via {@link #changerStatutSysteme}, ce qui garantit qu'on ne
-     * peut pas « sauter » une étape d'entretien depuis l'API RH générique.
-     */
     @Transactional
     public ApplicationDto changerStatutParRH(
             String idApplication, ApplicationStatus nouveauStatut, String commentaireRH, String recruteurKeycloakId) {
@@ -250,11 +328,6 @@ public class ApplyService {
         return toDto(application);
     }
 
-    /**
-     * Point d'entrée utilisé par InterviewService pour faire progresser une
-     * candidature suite à la planification ou au résultat d'un entretien.
-     * Passe par la même validation de transitions que changerStatutParRH.
-     */
     @Transactional
     public ApplicationDto changerStatutSysteme(
             String idApplication, ApplicationStatus nouveauStatut, String commentaire, String auteurKeycloakId) {
@@ -321,12 +394,6 @@ public class ApplyService {
         return poste;
     }
 
-    private void assertPasDeCandidatureExistante(String candidatKeycloakId, String posteId) {
-        if (applicationRepository.existsByCandidatKeycloakIdAndPosteRecrutementId(candidatKeycloakId, posteId)) {
-            throw new CandidatureExistanteException();
-        }
-    }
-
     private void validateCvFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new CvRequisException("Le fichier CV est requis");
@@ -341,7 +408,7 @@ public class ApplyService {
             throw new CvRequisException("Formats acceptés : PDF, DOC, DOCX");
         }
         if (file.getSize() > MAX_CV_SIZE) {
-            throw new CvRequisException("Le CV ne doit pas dépasser 5 Mo");
+            throw new CvRequisException("Le CV ne doit pas dépasser 10 Mo");
         }
     }
 
@@ -355,7 +422,6 @@ public class ApplyService {
         }
     }
 
-    /** Public pour permettre à InterviewService de récupérer la candidature liée à un entretien. */
     public Application getApplicationOuException(String idApplication) {
         return applicationRepository.findById(idApplication)
                 .orElseThrow(() -> new CandidatureNotFoundException(idApplication));

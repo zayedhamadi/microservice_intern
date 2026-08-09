@@ -1,13 +1,23 @@
 server:
   port: ${GATEWAY_PORT:8080}
 
+
+
+
 spring:
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 30MB
+
   application:
     name: gateway-service
   config:
     import: optional:configserver:http://localhost:${CONFIG_PORT:8888}
   cloud:
     gateway:
+      httpclient:
+        max-header-size: 16KB
       server:
         webmvc:
           routes:
@@ -60,6 +70,11 @@ spring:
               uri: lb://RECRUTEMENT-SERVICE
               predicates:
                 - Path=/rh/api/postesRecrutement/**
+
+            - id: recrutement-service-candidatures
+              uri: lb://RECRUTEMENT-SERVICE
+              predicates:
+                - Path=/rh/api/candidatures/**
 
 
     loadbalancer:

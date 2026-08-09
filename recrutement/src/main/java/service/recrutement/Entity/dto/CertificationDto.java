@@ -16,5 +16,5 @@ public class CertificationDto {
     String titre;
     String description;
     LocalDate dateCertif;
-    String pdfBase64; // input : base64 brut ou data URI ; output : toujours data URI complet
+    String pdfBase64;
 }

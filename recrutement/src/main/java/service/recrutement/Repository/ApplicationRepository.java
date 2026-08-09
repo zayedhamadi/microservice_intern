@@ -4,6 +4,7 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 import service.recrutement.Entity.Application;
 import service.recrutement.Entity.Enum.ApplicationStatus;
+import service.recrutement.Entity.dto.ApplicationDto;
 
 import java.util.List;
 import java.util.Optional;
@@ -24,4 +25,6 @@ public interface ApplicationRepository extends MongoRepository<Application, Stri
     List<Application> findByPosteRecrutementIdAndStatut(String posteRecrutementId, ApplicationStatus statut);
 
     long countByPosteRecrutementId(String posteRecrutementId);
+
+    Optional<ApplicationDto> findByIdApplication(String idApplication);
 }

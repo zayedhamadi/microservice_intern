@@ -16,12 +16,12 @@ import java.util.Optional;
 public class FileUserService {
 
     FileUserRepository repository;
-    private static final long MAX_CV_SIZE = 5L * 1024 * 1024;
+    private static final long MAX_CV_SIZE = 10L * 1024 * 1024;
 
     public void validateCv(MultipartFile file) {
         if (file.isEmpty()) throw new RuntimeException("Fichier vide");
         if (!"application/pdf".equals(file.getContentType())) throw new RuntimeException("Le CV doit être un PDF");
-        if (file.getSize() > MAX_CV_SIZE) throw new RuntimeException("CV trop volumineux (max 5MB)");
+        if (file.getSize() > MAX_CV_SIZE) throw new RuntimeException("CV trop volumineux (max 10MB)");
     }
 
     public FileUser uploadOrUpdateCv(String keycloakId, byte[] cv, String fileName) {

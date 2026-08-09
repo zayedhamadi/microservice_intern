@@ -2,12 +2,11 @@ server:
   port: ${RECRUTEMENT_PORT:8082}
   shutdown: graceful
   tomcat:
-    max-http-form-post-size: 20971520
+    max-http-form-post-size: 25MB   # doit être >= la somme cv + lettre + marge
 
 internal:
   api:
     key: ${INTERNAL_API_KEY}
-
 
 spring:
   application:
@@ -43,10 +42,11 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
+
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 200MB
+      max-file-size: 10MB      # limite par fichier individuel (cv OU lettre)
+      max-request-size: 25MB   # limite pour la requête complète (cv + lettre + reste du form)
 
 eureka:
   client:

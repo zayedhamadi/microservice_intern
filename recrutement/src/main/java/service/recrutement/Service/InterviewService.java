@@ -75,11 +75,7 @@ public class InterviewService {
         return toDto(saved);
     }
 
-    /**
-     * Seul l'entretien RH initial peut se faire par téléphone. L'entretien
-     * technique et l'entretien RH final doivent se dérouler en visio (Meet)
-     * ou en présentiel — jamais par téléphone.
-     */
+
     private void validerMode(InterviewType type, InterviewMode mode) {
         if (mode == null) {
             throw new TransitionStatutInvalideException("Le mode de l'entretien (téléphone / meet / présentiel) est requis");
