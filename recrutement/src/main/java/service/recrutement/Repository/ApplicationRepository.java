@@ -27,4 +27,6 @@ public interface ApplicationRepository extends MongoRepository<Application, Stri
     long countByPosteRecrutementId(String posteRecrutementId);
 
     Optional<ApplicationDto> findByIdApplication(String idApplication);
+    List<Application> findByPosteRecrutementId(String posteRecrutementId);
+
 }

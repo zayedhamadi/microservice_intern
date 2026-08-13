@@ -5,15 +5,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import service.recrutement.Client.RankingClient;
 import service.recrutement.Client.UserServiceClient;
 import service.recrutement.Entity.Application;
 import service.recrutement.Entity.Enum.ApplicationStatus;
 import service.recrutement.Entity.FileUser;
 import service.recrutement.Entity.PosteRecrutement;
-import service.recrutement.Entity.dto.ApplicationDto;
-import service.recrutement.Entity.dto.ApplyRequestDto;
-import service.recrutement.Entity.dto.CandidatDto;
-import service.recrutement.Entity.dto.StatusChange;
+import service.recrutement.Entity.dto.*;
 import service.recrutement.Exception.*;
 import service.recrutement.Mail.RecrutementMail;
 import service.recrutement.Repository.ApplicationRepository;
@@ -50,11 +48,92 @@ public class ApplyService {
     }
 
     private final ApplicationRepository applicationRepository;
-    private final PosteRecrutementService posteRecrutementService;
     private final FileUserService fileUserService;
     private final UserServiceClient userServiceClient;
     private final RecrutementMail recrutementMail;
+private final RankingClient rankingClient;
+private final PosteRecrutementService posteRecrutementService; // déjà injecté ailleurs
 
+public List<ApplicationDto> getCandidaturesClasseesPourPoste(String posteId) {
+    PosteRecrutement poste = posteRecrutementService.getById(posteId);
+    List<Application> candidatures = applicationRepository
+            .findByPosteRecrutementIdOrderByDateCandidatureDesc(posteId);
+
+    if (candidatures.isEmpty()) return List.of();
+
+    MlPosteDto posteDto = MlPosteDto.builder()
+            .competencesRequises(poste.getCompetencesRequises())
+            .languesRequises(poste.getLanguesRequises())
+            .anneesExperienceMin(poste.getAnneesExperienceMin())
+            .niveauEtudeRequis(poste.getNiveauEtudeRequis())
+            .typeContrat(poste.getTypeContrat() != null ? poste.getTypeContrat().name() : null)
+            .workType(poste.getWorkType() != null ? poste.getWorkType().name() : null)
+            .lieu(poste.getLieu())
+            .salaire(poste.getSalaire() != null ? poste.getSalaire().doubleValue() : null)
+            .build();
+
+    List<MlCandidatDto> candidatsMl = candidatures.stream()
+            .map(a -> fetchCandidatMlDto(a, poste))
+            .toList();
+
+    Map<String, Object> body = Map.of(
+            "candidats", candidatsMl,
+            "poste", posteDto
+    );
+
+   List<Map<String, Object>> scores;
+try {
+    scores = rankingClient.scoreBatch(body);
+    log.info("Scores reçus du ranking-service pour le poste {} : {}", posteId, scores);
+} catch (Exception e) {
+    log.warn("Ranking-service injoignable pour le poste {} : {}", posteId, e.getMessage());
+    scores = List.of();
+}
+
+    Map<String, Double> scoreParCandidat = scores.stream()
+            .collect(Collectors.toMap(
+                    m -> (String) m.get("candidatKeycloakId"),
+                    m -> ((Number) m.get("score")).doubleValue()
+            ));
+
+    return candidatures.stream()
+            .map(a -> {
+                ApplicationDto dto = toDtoPublic(a);
+                Double s = scoreParCandidat.get(a.getCandidatKeycloakId());
+                dto.setScoreMatching(s);
+                return dto;
+            })
+            .sorted(Comparator.comparing(
+                    ApplicationDto::getScoreMatching,
+                    Comparator.nullsLast(Comparator.reverseOrder())))
+            .toList();
+}
+
+    private MlCandidatDto fetchCandidatMlDto(Application a, PosteRecrutement poste) {
+     CandidatDto c = fetchCandidatInfo(a.getCandidatKeycloakId());
+    log.info("DEBUG candidat={} → userServiceOk={} snapshotCompetences={}",
+            a.getCandidatKeycloakId(), c != null, a.getCompetences());
+    if (c == null) {
+        // fallback sur le snapshot stocké dans la candidature elle-même
+        return MlCandidatDto.builder()
+                .keycloakId(a.getCandidatKeycloakId())
+                .competences(a.getCompetences())
+                .langues(a.getLangues())
+                .anneesExperience(a.getAnneesExperienceCandidat())
+                .build();
+    }
+    return MlCandidatDto.builder()
+            .keycloakId(a.getCandidatKeycloakId())
+            .competences(c.getCompetences())
+            .langues(c.getLangues())
+            .anneesExperience(c.getAnneesExperience())
+            .niveauEtude(c.getNiveauEtude())
+            .typeContratSouhaite(c.getTypeContratSouhaite())
+            .lieu(c.getLieu())
+            .salaireAttendu(c.getSalaireAttendu())
+            .certifications(c.getCertifications())
+            .build();
+}
     private void notifyRecruteurNouvelleCandidature(PosteRecrutement poste, Application application) {
         try {
             recrutementMail.sendCandidatureConfirmation(poste, application);
@@ -143,10 +222,13 @@ public class ApplyService {
             application.setDateCandidature(LocalDate.now());
             application.setDateDernierChangementStatut(now);
 
-            if (candidat != null) {
-                application.setNomComplet(candidat.getPrenom() + " " + candidat.getNom());
-                application.setEmail(candidat.getEmail());
-            }
+         if (candidat != null) {
+    application.setNomComplet(candidat.getPrenom() + " " + candidat.getNom());
+    application.setEmail(candidat.getEmail());
+    application.setCompetences(candidat.getCompetences());
+    application.setLangues(candidat.getLangues());
+    application.setAnneesExperienceCandidat(candidat.getAnneesExperience());
+}
 
             application.getHistoriqueStatuts().add(StatusChange.builder()
                     .statut(ApplicationStatus.EN_ATTENTE)
@@ -198,12 +280,15 @@ public class ApplyService {
                 .dateDernierChangementStatut(now)
                 .build();
 
-        if (candidat != null) {
-            application.setNomComplet(candidat.getPrenom() + " " + candidat.getNom());
-            application.setEmail(candidat.getEmail());
-        }
+      if (candidat != null) {
+    application.setNomComplet(candidat.getPrenom() + " " + candidat.getNom());
+    application.setEmail(candidat.getEmail());
+    application.setCompetences(candidat.getCompetences());
+    application.setLangues(candidat.getLangues());
+    application.setAnneesExperienceCandidat(candidat.getAnneesExperience());
+}
 
-        application.getHistoriqueStatuts().add(StatusChange.builder()
+application.getHistoriqueStatuts().add(StatusChange.builder()
                 .statut(ApplicationStatus.EN_ATTENTE)
                 .date(now)
                 .commentaire("Candidature déposée")

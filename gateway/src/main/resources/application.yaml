@@ -76,6 +76,11 @@ spring:
               predicates:
                 - Path=/rh/api/candidatures/**
 
+            - id: recrutement-service-candidat
+              uri: lb://RECRUTEMENT-SERVICE
+              predicates:
+                - Path=/candidat/**
+
 
     loadbalancer:
       cache:

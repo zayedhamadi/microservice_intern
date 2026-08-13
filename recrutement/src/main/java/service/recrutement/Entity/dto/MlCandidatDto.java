@@ -1,20 +1,16 @@
 package service.recrutement.Entity.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.util.List;
 
-@Data
+@Getter
+@Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CandidatDto {
-    private Long id;
-    private String nom;
-    private String prenom;
-    private String email;
-
+public class MlCandidatDto {
+    private String keycloakId;
     private List<String> competences;
     private List<String> langues;
     private Integer anneesExperience;

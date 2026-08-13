@@ -2,7 +2,11 @@ server:
   port: ${RECRUTEMENT_PORT:8082}
   shutdown: graceful
   tomcat:
-    max-http-form-post-size: 25MB   # doit être >= la somme cv + lettre + marge
+    max-http-form-post-size: 25MB
+
+
+ranking-service:
+  url: ${RANKING_SERVICE_URL:http://localhost:8002}
 
 internal:
   api:

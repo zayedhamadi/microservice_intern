@@ -27,6 +27,12 @@ public class ApplyController {
 
     private static final String ROLE_RH = "ROLE_RH";
 
+    @GetMapping("/poste/{posteId}/classees")
+@PreAuthorize("hasRole('RH')")
+public ResponseEntity<List<ApplicationDto>> getCandidaturesClasseesPourPoste(@PathVariable String posteId) {
+    return ResponseEntity.ok(applyService.getCandidaturesClasseesPourPoste(posteId));
+}
+
     @PostMapping(consumes = "multipart/form-data")
     @PreAuthorize("hasRole('CANDIDAT')")
     public ResponseEntity<ApplicationDto> postulerAvecCvExistant(
@@ -59,7 +65,6 @@ public class ApplyController {
                 candidatKeycloakId, idPosteRecrutement, cv, lettreMotivationTexte, lettreMotivationPdf));
     }
 
-    /** Modifier une candidature EN_ATTENTE (lettre de motivation, CV, lettre PDF). */
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")
     @PreAuthorize("hasRole('CANDIDAT')")
     public ResponseEntity<ApplicationDto> modifierCandidature(
