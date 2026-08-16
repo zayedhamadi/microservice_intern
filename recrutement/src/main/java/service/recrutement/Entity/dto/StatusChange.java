@@ -1,11 +1,16 @@
 package service.recrutement.Entity.dto;
 
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 import lombok.experimental.FieldDefaults;
 import service.recrutement.Entity.Enum.ApplicationStatus;
 
 import java.time.LocalDateTime;
-
 
 @Getter
 @Setter
@@ -15,8 +20,12 @@ import java.time.LocalDateTime;
 @ToString
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class StatusChange {
+
     ApplicationStatus statut;
+
     LocalDateTime date;
+
     String commentaire;
-    String auteurKeycloakId; 
+
+    String auteurKeycloakId;
 }

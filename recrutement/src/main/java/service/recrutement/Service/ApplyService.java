@@ -51,89 +51,90 @@ public class ApplyService {
     private final FileUserService fileUserService;
     private final UserServiceClient userServiceClient;
     private final RecrutementMail recrutementMail;
-private final RankingClient rankingClient;
-private final PosteRecrutementService posteRecrutementService; // déjà injecté ailleurs
+    private final RankingClient rankingClient;
+    private final PosteRecrutementService posteRecrutementService; // déjà injecté ailleurs
 
-public List<ApplicationDto> getCandidaturesClasseesPourPoste(String posteId) {
-    PosteRecrutement poste = posteRecrutementService.getById(posteId);
-    List<Application> candidatures = applicationRepository
-            .findByPosteRecrutementIdOrderByDateCandidatureDesc(posteId);
+    public List<ApplicationDto> getCandidaturesClasseesPourPoste(String posteId) {
+        PosteRecrutement poste = posteRecrutementService.getById(posteId);
+        List<Application> candidatures = applicationRepository
+                .findByPosteRecrutementIdOrderByDateCandidatureDesc(posteId);
 
-    if (candidatures.isEmpty()) return List.of();
+        if (candidatures.isEmpty()) return List.of();
 
-    MlPosteDto posteDto = MlPosteDto.builder()
-            .competencesRequises(poste.getCompetencesRequises())
-            .languesRequises(poste.getLanguesRequises())
-            .anneesExperienceMin(poste.getAnneesExperienceMin())
-            .niveauEtudeRequis(poste.getNiveauEtudeRequis())
-            .typeContrat(poste.getTypeContrat() != null ? poste.getTypeContrat().name() : null)
-            .workType(poste.getWorkType() != null ? poste.getWorkType().name() : null)
-            .lieu(poste.getLieu())
-            .salaire(poste.getSalaire() != null ? poste.getSalaire().doubleValue() : null)
-            .build();
+        MlPosteDto posteDto = MlPosteDto.builder()
+                .competencesRequises(poste.getCompetencesRequises())
+                .languesRequises(poste.getLanguesRequises())
+                .anneesExperienceMin(poste.getAnneesExperienceMin())
+                .niveauEtudeRequis(poste.getNiveauEtudeRequis())
+                .typeContrat(poste.getTypeContrat() != null ? poste.getTypeContrat().name() : null)
+                .workType(poste.getWorkType() != null ? poste.getWorkType().name() : null)
+                .lieu(poste.getLieu())
+                .salaire(poste.getSalaire() != null ? poste.getSalaire().doubleValue() : null)
+                .build();
 
-    List<MlCandidatDto> candidatsMl = candidatures.stream()
-            .map(a -> fetchCandidatMlDto(a, poste))
-            .toList();
+        List<MlCandidatDto> candidatsMl = candidatures.stream()
+                .map(a -> fetchCandidatMlDto(a, poste))
+                .toList();
 
-    Map<String, Object> body = Map.of(
-            "candidats", candidatsMl,
-            "poste", posteDto
-    );
+        Map<String, Object> body = Map.of(
+                "candidats", candidatsMl,
+                "poste", posteDto
+        );
 
-   List<Map<String, Object>> scores;
-try {
-    scores = rankingClient.scoreBatch(body);
-    log.info("Scores reçus du ranking-service pour le poste {} : {}", posteId, scores);
-} catch (Exception e) {
-    log.warn("Ranking-service injoignable pour le poste {} : {}", posteId, e.getMessage());
-    scores = List.of();
-}
+        List<Map<String, Object>> scores;
+        try {
+            scores = rankingClient.scoreBatch(body);
+            log.info("Scores reçus du ranking-service pour le poste {} : {}", posteId, scores);
+        } catch (Exception e) {
+            log.warn("Ranking-service injoignable pour le poste {} : {}", posteId, e.getMessage());
+            scores = List.of();
+        }
 
-    Map<String, Double> scoreParCandidat = scores.stream()
-            .collect(Collectors.toMap(
-                    m -> (String) m.get("candidatKeycloakId"),
-                    m -> ((Number) m.get("score")).doubleValue()
-            ));
+        Map<String, Double> scoreParCandidat = scores.stream()
+                .collect(Collectors.toMap(
+                        m -> (String) m.get("candidatKeycloakId"),
+                        m -> ((Number) m.get("score")).doubleValue()
+                ));
 
-    return candidatures.stream()
-            .map(a -> {
-                ApplicationDto dto = toDtoPublic(a);
-                Double s = scoreParCandidat.get(a.getCandidatKeycloakId());
-                dto.setScoreMatching(s);
-                return dto;
-            })
-            .sorted(Comparator.comparing(
-                    ApplicationDto::getScoreMatching,
-                    Comparator.nullsLast(Comparator.reverseOrder())))
-            .toList();
-}
+        return candidatures.stream()
+                .map(a -> {
+                    ApplicationDto dto = toDtoPublic(a);
+                    Double s = scoreParCandidat.get(a.getCandidatKeycloakId());
+                    dto.setScoreMatching(s);
+                    return dto;
+                })
+                .sorted(Comparator.comparing(
+                        ApplicationDto::getScoreMatching,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
 
     private MlCandidatDto fetchCandidatMlDto(Application a, PosteRecrutement poste) {
-     CandidatDto c = fetchCandidatInfo(a.getCandidatKeycloakId());
-    log.info("DEBUG candidat={} → userServiceOk={} snapshotCompetences={}",
-            a.getCandidatKeycloakId(), c != null, a.getCompetences());
-    if (c == null) {
-        // fallback sur le snapshot stocké dans la candidature elle-même
+        CandidatDto c = fetchCandidatInfo(a.getCandidatKeycloakId());
+        log.info("DEBUG candidat={} → userServiceOk={} snapshotCompetences={}",
+                a.getCandidatKeycloakId(), c != null, a.getCompetences());
+        if (c == null) {
+            // fallback sur le snapshot stocké dans la candidature elle-même
+            return MlCandidatDto.builder()
+                    .keycloakId(a.getCandidatKeycloakId())
+                    .competences(a.getCompetences())
+                    .langues(a.getLangues())
+                    .anneesExperience(a.getAnneesExperienceCandidat())
+                    .build();
+        }
         return MlCandidatDto.builder()
                 .keycloakId(a.getCandidatKeycloakId())
-                .competences(a.getCompetences())
-                .langues(a.getLangues())
-                .anneesExperience(a.getAnneesExperienceCandidat())
+                .competences(c.getCompetences())
+                .langues(c.getLangues())
+                .anneesExperience(c.getAnneesExperience())
+                .niveauEtude(c.getNiveauEtude())
+                .typeContratSouhaite(c.getTypeContratSouhaite())
+                .lieu(c.getLieu())
+                .salaireAttendu(c.getSalaireAttendu())
+                .certifications(c.getCertifications())
                 .build();
     }
-    return MlCandidatDto.builder()
-            .keycloakId(a.getCandidatKeycloakId())
-            .competences(c.getCompetences())
-            .langues(c.getLangues())
-            .anneesExperience(c.getAnneesExperience())
-            .niveauEtude(c.getNiveauEtude())
-            .typeContratSouhaite(c.getTypeContratSouhaite())
-            .lieu(c.getLieu())
-            .salaireAttendu(c.getSalaireAttendu())
-            .certifications(c.getCertifications())
-            .build();
-}
+
     private void notifyRecruteurNouvelleCandidature(PosteRecrutement poste, Application application) {
         try {
             recrutementMail.sendCandidatureConfirmation(poste, application);
@@ -167,7 +168,9 @@ try {
         return saveCandidature(application, poste);
     }
 
-    /** Postuler avec un CV téléversé spécifiquement pour cette candidature. */
+    /**
+     * Postuler avec un CV téléversé spécifiquement pour cette candidature.
+     */
     @Transactional
     public ApplicationDto postulerAvecNouveauCv(
             String candidatKeycloakId, String posteId, MultipartFile cvFile,
@@ -197,7 +200,7 @@ try {
      * Retourne le document à sauvegarder pour une nouvelle candidature :
      * - s'il n'existe aucune candidature du candidat pour ce poste, en crée une nouvelle ;
      * - si une candidature RETIRE existe déjà (contrainte d'unicité candidat+poste),
-     *   elle est réactivée (repassée à EN_ATTENTE) au lieu de créer un doublon ;
+     * elle est réactivée (repassée à EN_ATTENTE) au lieu de créer un doublon ;
      * - si une candidature active (tout autre statut) existe déjà, on refuse.
      */
     private Application prepareApplicationForSubmission(
@@ -222,13 +225,13 @@ try {
             application.setDateCandidature(LocalDate.now());
             application.setDateDernierChangementStatut(now);
 
-         if (candidat != null) {
-    application.setNomComplet(candidat.getPrenom() + " " + candidat.getNom());
-    application.setEmail(candidat.getEmail());
-    application.setCompetences(candidat.getCompetences());
-    application.setLangues(candidat.getLangues());
-    application.setAnneesExperienceCandidat(candidat.getAnneesExperience());
-}
+            if (candidat != null) {
+                application.setNomComplet(candidat.getPrenom() + " " + candidat.getNom());
+                application.setEmail(candidat.getEmail());
+                application.setCompetences(candidat.getCompetences());
+                application.setLangues(candidat.getLangues());
+                application.setAnneesExperienceCandidat(candidat.getAnneesExperience());
+            }
 
             application.getHistoriqueStatuts().add(StatusChange.builder()
                     .statut(ApplicationStatus.EN_ATTENTE)
@@ -280,15 +283,15 @@ try {
                 .dateDernierChangementStatut(now)
                 .build();
 
-      if (candidat != null) {
-    application.setNomComplet(candidat.getPrenom() + " " + candidat.getNom());
-    application.setEmail(candidat.getEmail());
-    application.setCompetences(candidat.getCompetences());
-    application.setLangues(candidat.getLangues());
-    application.setAnneesExperienceCandidat(candidat.getAnneesExperience());
-}
+        if (candidat != null) {
+            application.setNomComplet(candidat.getPrenom() + " " + candidat.getNom());
+            application.setEmail(candidat.getEmail());
+            application.setCompetences(candidat.getCompetences());
+            application.setLangues(candidat.getLangues());
+            application.setAnneesExperienceCandidat(candidat.getAnneesExperience());
+        }
 
-application.getHistoriqueStatuts().add(StatusChange.builder()
+        application.getHistoriqueStatuts().add(StatusChange.builder()
                 .statut(ApplicationStatus.EN_ATTENTE)
                 .date(now)
                 .commentaire("Candidature déposée")
@@ -354,7 +357,9 @@ application.getHistoriqueStatuts().add(StatusChange.builder()
         return toDto(saved);
     }
 
-    /** Retourne (bytes, fileName) — sécurisé : réservé au propriétaire de la candidature ou au RH. */
+    /**
+     * Retourne (bytes, fileName) — sécurisé : réservé au propriétaire de la candidature ou au RH.
+     */
     public Application getApplicationPourTelechargementLettre(String idApplication, String requesterKeycloakId, boolean isRH) {
         Application application = getApplicationOuException(idApplication);
 
@@ -403,53 +408,116 @@ application.getHistoriqueStatuts().add(StatusChange.builder()
 
     @Transactional
     public ApplicationDto changerStatutParRH(
-            String idApplication, ApplicationStatus nouveauStatut, String commentaireRH, String recruteurKeycloakId) {
+            String idApplication,
+            ApplicationStatus nouveauStatut,
+            String commentaireRH,
+            String recruteurKeycloakId) {
 
-        Application application = getApplicationOuException(idApplication);
-        changerStatutInterne(application, nouveauStatut, commentaireRH, recruteurKeycloakId);
+        if (nouveauStatut == null) {
+            throw new TransitionStatutInvalideException(
+                    "Le nouveau statut est obligatoire"
+            );
+        }
+
+        if (nouveauStatut == ApplicationStatus.REJETE
+                && (commentaireRH == null || commentaireRH.isBlank())) {
+
+            throw new TransitionStatutInvalideException(
+                    "Un commentaire RH est obligatoire pour rejeter une candidature"
+            );
+        }
+
+        Application application =
+                getApplicationOuException(idApplication);
+
+        changerStatutInterne(
+                application,
+                nouveauStatut,
+                commentaireRH,
+                recruteurKeycloakId
+        );
 
         notifyCandidatChangementStatut(application);
 
         return toDto(application);
     }
 
-    @Transactional
-    public ApplicationDto changerStatutSysteme(
-            String idApplication, ApplicationStatus nouveauStatut, String commentaire, String auteurKeycloakId) {
+  @Transactional
+public ApplicationDto changerStatutSysteme(
+        String idApplication,
+        ApplicationStatus nouveauStatut,
+        String commentaire,
+        String auteurKeycloakId) {
 
-        Application application = getApplicationOuException(idApplication);
-        changerStatutInterne(application, nouveauStatut, commentaire, auteurKeycloakId);
+    Application application =
+            getApplicationOuException(idApplication);
 
-        notifyCandidatChangementStatut(application);
+    changerStatutInterne(
+            application,
+            nouveauStatut,
+            commentaire,
+            auteurKeycloakId
+    );
 
-        return toDto(application);
-    }
+    notifyCandidatChangementStatut(application);
 
+    return toDto(application);
+}
     private void changerStatutInterne(
-            Application application, ApplicationStatus nouveauStatut, String commentaire, String auteurKeycloakId) {
+            Application application,
+            ApplicationStatus nouveauStatut,
+            String commentaire,
+            String auteurKeycloakId) {
 
-        ApplicationStatus ancienStatut = application.getStatut();
-        Set<ApplicationStatus> transitionsPossibles = TRANSITIONS_AUTORISEES.getOrDefault(
-                ancienStatut, EnumSet.noneOf(ApplicationStatus.class));
+        ApplicationStatus ancienStatut =
+                application.getStatut();
+
+        Set<ApplicationStatus> transitionsPossibles =
+                TRANSITIONS_AUTORISEES.getOrDefault(
+                        ancienStatut,
+                        EnumSet.noneOf(ApplicationStatus.class)
+                );
 
         if (!transitionsPossibles.contains(nouveauStatut)) {
             throw new TransitionStatutInvalideException(
-                    "Transition impossible : " + ancienStatut + " → " + nouveauStatut);
+                    "Transition impossible : "
+                            + ancienStatut
+                            + " → "
+                            + nouveauStatut
+            );
+        }
+
+        if (nouveauStatut == ApplicationStatus.REJETE
+                && (commentaire == null || commentaire.isBlank())) {
+
+            throw new TransitionStatutInvalideException(
+                    "Un commentaire est obligatoire pour un rejet"
+            );
         }
 
         LocalDateTime now = LocalDateTime.now();
+
         application.setStatut(nouveauStatut);
         application.setDateDernierChangementStatut(now);
+
         if (commentaire != null && !commentaire.isBlank()) {
-            application.setCommentaireRH(commentaire);
+            application.setCommentaireRH(commentaire.trim());
+        } else {
+            application.setCommentaireRH(null);
         }
 
-        application.getHistoriqueStatuts().add(StatusChange.builder()
-                .statut(nouveauStatut)
-                .date(now)
-                .commentaire(commentaire)
-                .auteurKeycloakId(auteurKeycloakId)
-                .build());
+        if (application.getHistoriqueStatuts() == null) {
+            application.setHistoriqueStatuts(new ArrayList<>());
+        }
+
+        application.getHistoriqueStatuts().add(
+                StatusChange.builder()
+                        .statut(nouveauStatut)
+                        .date(now)
+                        .commentaire(commentaire)
+                        .auteurKeycloakId(auteurKeycloakId)
+                        .build()
+        );
 
         applicationRepository.save(application);
     }

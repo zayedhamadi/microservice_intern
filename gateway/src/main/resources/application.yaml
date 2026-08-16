@@ -80,6 +80,14 @@ spring:
               uri: lb://RECRUTEMENT-SERVICE
               predicates:
                 - Path=/candidat/**
+            - id: recrutement-service-interviews
+              uri: lb://RECRUTEMENT-SERVICE
+              predicates:
+                - Path=/interviews/**
+            - id: recrutement-service-entretiens-cal
+              uri: lb://RECRUTEMENT-SERVICE
+              predicates:
+                - Path=/rh/api/entretiens/**
 
 
     loadbalancer:

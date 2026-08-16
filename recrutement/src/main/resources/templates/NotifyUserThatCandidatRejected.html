@@ -1,136 +1,16 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Retour sur votre candidature - {{titrePoste}}</title>
-    <style>
-        body, p, table, tr, td { margin: 0; padding: 0; }
-        body {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .header {
-            background-color: #6b6e76;
-            color: white;
-            padding: 20px;
-            text-align: center;
-            border-radius: 8px 8px 0 0;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-        }
-        .content {
-            padding: 25px;
-            background-color: #ffffff;
-            border-radius: 0 0 8px 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-top: 0;
-        }
-        p {
-            margin-bottom: 15px;
-            font-size: 15px;
-        }
-        strong {
-            color: #6b6e76;
-        }
-        .status-badge {
-            display: inline-block;
-            background-color: #f0f0f2;
-            color: #6b6e76;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
-            margin: 15px 0;
-            text-align: center;
-        }
-        .comment-box {
-            margin: 20px 0;
-            padding: 15px;
-            background-color: #f9f9f9;
-            border-left: 4px solid #6b6e76;
-            border-radius: 0 6px 6px 0;
-            font-size: 14px;
-            line-height: 1.5;
-        }
-        .comment-box strong {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-        }
-        .button {
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: #7c5cff;
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            margin: 20px 0;
-            font-weight: 600;
-            transition: background-color 0.3s;
-            text-align: center;
-        }
-        .button:hover {
-            background-color: #6a48e5;
-        }
-        .footer {
-            margin-top: 30px;
-            text-align: center;
-            color: #777;
-            font-size: 12px;
-            padding: 15px 0;
-        }
-        .encouragement {
-            font-style: italic;
-            color: #666;
-            margin-top: 15px;
-            padding: 10px;
-            background-color: #f9f9f9;
-            border-radius: 5px;
-        }
-        @media screen and (max-width: 600px) {
-            body { padding: 10px; }
-            .content { padding: 15px; }
-            .header h1 { font-size: 20px; }
-        }
-    </style>
-</head>
-<body>
-<div class="header">
-    <h1>Mise à jour de votre candidature</h1>
+<head><meta charset="UTF-8"><title>Candidature non retenue</title></head>
+<body style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5">
+<div style="background:#6b6e76;color:white;padding:20px;text-align:center;border-radius:8px 8px 0 0"><h1 style="margin:0;font-size:22px">Mise à jour de votre candidature</h1></div>
+<div style="padding:25px;background:white;border-radius:0 0 8px 8px">
+<p>Bonjour <strong>{{prenom}}</strong>,</p>
+<p>Merci pour votre intérêt pour le poste <strong>{{titrePoste}}</strong>.</p>
+<p>Après étude, nous ne donnerons pas suite à votre candidature pour ce poste.</p>
+<div style="display:inline-block;background:#f0f0f2;color:#6b6e76;padding:8px 16px;border-radius:20px;font-weight:600">❌ Candidature non retenue</div>
+<div style="display: {{commentaireDisplay}};margin:20px 0;padding:15px;background:#f9f9f9;border-left:4px solid #6b6e76;border-radius:0 6px 6px 0"><strong>Retour du recruteur :</strong><br>{{commentaireRH}}</div>
+<div style="text-align:center"><a href="{{consulterUrl}}" style="display:inline-block;padding:12px 24px;background:#7c5cff;color:white;text-decoration:none;border-radius:6px;font-weight:600">Voir nos offres</a></div>
 </div>
-<div class="content">
-    <p>Bonjour <strong>{{prenom}}</strong>,</p>
-    <p>Nous vous remercions pour l'intérêt porté au poste <strong>{{titrePoste}}</strong> et pour le temps consacré à votre candidature.</p>
-    <p>Après étude approfondie de votre profil, nous avons pris la décision de ne pas donner suite à votre candidature pour ce poste.</p>
-    <div class="status-badge">❌ Candidature non retenue</div>
-    {{#if commentaireRH}}
-    <div class="comment-box">
-        <strong>Retour du recruteur :</strong>
-        {{commentaireRH}}
-    </div>
-    {{/if}}
-    <p class="encouragement">
-        Nous vous encourageons à consulter nos autres offres d'emploi. Votre profil pourrait correspondre à d'autres postes au sein de notre entreprise.
-    </p>
-    <div style="text-align: center;">
-        <a href="{{consulterUrl}}" class="button">Voir nos offres</a>
-    </div>
-    <p style="margin-top: 20px; font-size: 14px; color: #666;">
-        Nous conservons votre CV dans notre base de données pour de futures opportunités.
-    </p>
-</div>
-<div class="footer">
-    <p>© 2026 - Supra Technology. Tous droits réservés.</p>
-</div>
+<div style="text-align:center;color:#777;font-size:12px;margin-top:20px">© {{anneeCourante}} - Supra Technology</div>
 </body>
 </html>

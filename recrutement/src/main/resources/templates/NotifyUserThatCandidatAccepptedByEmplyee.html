@@ -1,70 +1,15 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Entretien technique réussi - {{titrePoste}}</title>
-</head>
-<body style="margin:0; padding:0; background-color:#f4f6f8; font-family:Arial, Helvetica, sans-serif; line-height:1.6; color:#1f2933;">
-<!-- Conteneur principal -->
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f6f8; padding:32px 0;">
-    <tr>
-        <td align="center">
-            <!-- Conteneur du contenu (600px max) -->
-            <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-                <!-- En-tête -->
-                <tr>
-                    <td style="background-color:#2f6fed; padding:24px 32px; text-align:center;">
-                        <h1 style="margin:0; color:#ffffff; font-size:20px; font-weight:600;">✅ Votre entretien technique est concluant</h1>
-                    </td>
-                </tr>
-
-                <!-- Contenu principal -->
-                <tr>
-                    <td style="padding:32px; color:#1f2933; font-size:15px; line-height:1.6;">
-                        <p>Bonjour <strong>{{prenom}}</strong>,</p>
-
-                        <p>
-                            Bonne nouvelle : suite à votre entretien technique pour le poste
-                            <strong style="color:#2f6fed;">{{titrePoste}}</strong>, notre équipe a validé votre profil.
-                        </p>
-
-                        <p>
-                            Votre candidature passe maintenant à la dernière étape : un entretien final avec
-                            notre équipe RH, portant notamment sur les conditions et la rémunération.
-                            Vous recevrez très prochainement une convocation avec la date et les modalités.
-                        </p>
-
-                        <!-- Commentaire conditionnel -->
-                        {{#if commentaireRH}}
-                        <div style="background-color:#eef3fe; border-left:4px solid #2f6fed; padding:12px 16px; margin:20px 0; border-radius:4px;">
-                            <p style="margin:0; font-size:14px; color:#1f2933;">
-                                <strong>Retour de l'équipe technique :</strong> {{commentaireRH}}
-                            </p>
-                        </div>
-                        {{/if}}
-
-                        <!-- Bouton -->
-                        <p style="text-align:center; margin:28px 0;">
-                            <a href="{{consulterUrl}}" style="background-color:#2f6fed; color:#ffffff; text-decoration:none; padding:12px 28px; border-radius:6px; font-weight:bold; display:inline-block; transition:background-color 0.3s;">
-                                Suivre ma candidature
-                            </a>
-                        </p>
-
-                        <p>Encore félicitations pour cette étape franchie ! 🎉</p>
-                    </td>
-                </tr>
-
-                <!-- Pied de page -->
-                <tr>
-                    <td style="padding:16px 32px; background-color:#f4f6f8; color:#8a94a6; font-size:12px; text-align:center;">
-                        <p style="margin:0;">Cet email a été envoyé automatiquement, merci de ne pas y répondre directement.</p>
-                        <p style="margin:8px 0 0 0; font-size:11px;">© 2026 Supra Technology. Tous droits réservés.</p>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-</table>
+<head><meta charset="UTF-8"><title>Entretien technique réussi</title></head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:32px 0"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:white;border-radius:8px;overflow:hidden">
+<tr><td style="background:#2f6fed;padding:24px 32px;text-align:center"><h1 style="margin:0;color:white;font-size:20px">✅ Entretien technique concluant</h1></td></tr>
+<tr><td style="padding:32px;font-size:15px"><p>Bonjour <strong>{{prenom}}</strong>,</p><p>Bonne nouvelle pour le poste <strong style="color:#2f6fed">{{titrePoste}}</strong>, votre entretien technique est validé.</p>
+<div style="display: {{commentaireDisplay}};background:#eef3fe;border-left:4px solid #2f6fed;padding:12px 16px;margin:20px 0;border-radius:4px"><strong>Retour technique :</strong><br>{{commentaireRH}}</div>
+<p style="text-align:center;margin:28px 0"><a href="{{consulterUrl}}" style="background:#2f6fed;color:white;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:bold">Suivre ma candidature</a></p>
+</td></tr>
+<tr><td style="padding:16px 32px;background:#f4f6f8;color:#8a94a6;font-size:11px;text-align:center">© {{anneeCourante}} Supra Technology</td></tr>
+</table></td></tr></table>
 </body>
 </html>

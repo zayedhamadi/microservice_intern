@@ -98,7 +98,7 @@ services:
 
   mongo-recrutement:
     image: mongo:7
-    container_name: mongo-recrutement
+    container_name: mongo-recrutement-container
     restart: unless-stopped
     <<: *default-security
     environment:
