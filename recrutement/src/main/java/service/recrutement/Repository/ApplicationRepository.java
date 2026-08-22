@@ -4,6 +4,9 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 import service.recrutement.Entity.Application;
 import service.recrutement.Entity.Enum.ApplicationStatus;
+import service.recrutement.Entity.Enum.InterviewSource;
+import service.recrutement.Entity.Enum.InterviewType;
+import service.recrutement.Entity.Interview;
 import service.recrutement.Entity.dto.ApplicationDto;
 
 import java.util.List;
@@ -14,7 +17,7 @@ public interface ApplicationRepository extends MongoRepository<Application, Stri
 
     Optional<Application> findByCandidatKeycloakIdAndPosteRecrutementId(
             String candidatKeycloakId, String posteRecrutementId);
-
+List<Application> findByStatut(ApplicationStatus statut);
     boolean existsByCandidatKeycloakIdAndPosteRecrutementId(
             String candidatKeycloakId, String posteRecrutementId);
 

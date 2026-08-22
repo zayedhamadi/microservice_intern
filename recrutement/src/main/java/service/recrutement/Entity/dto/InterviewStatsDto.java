@@ -11,7 +11,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CalendarInterviewStatsDto {
+public class InterviewStatsDto {
     private String status;
     private long count;
 }

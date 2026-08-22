@@ -218,7 +218,7 @@ public class ApplyController {
     }
 
     @GetMapping("/poste/{posteId}")
-    @PreAuthorize("hasRole('RH')")
+    @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
     public ResponseEntity<List<ApplicationDto>> getCandidaturesPourPoste(
             @PathVariable String posteId) {
 

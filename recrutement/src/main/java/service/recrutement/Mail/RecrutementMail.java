@@ -84,7 +84,7 @@ public class RecrutementMail {
         if (interview.getMode() == InterviewMode.PRESENTIEL) {
             return interview.getLieu() != null && !interview.getLieu().isBlank() ? interview.getLieu() : "Adresse communiquée séparément";
         }
-        if (interview.getMode() == InterviewMode.MEET) {
+        if (interview.getMode() == InterviewMode.DISTANCIEL) {
             return interview.getLienVisio() != null && !interview.getLienVisio().isBlank() ? interview.getLienVisio() : "Lien communiqué séparément";
         }
         return "Vous serez contacté(e) par téléphone à l'heure indiquée";
@@ -94,7 +94,7 @@ public class RecrutementMail {
         if (mode == null) return "À préciser";
         return switch (mode) {
             case TELEPHONIQUE -> "Téléphonique";
-            case MEET -> "Visioconférence Google Meet";
+            case DISTANCIEL -> "Visioconférence Google Meet";
             case PRESENTIEL -> "Présentiel";
         };
     }

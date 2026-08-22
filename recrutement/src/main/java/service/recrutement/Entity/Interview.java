@@ -5,13 +5,15 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
-import service.recrutement.Entity.Enum.InterviewMode;
-import service.recrutement.Entity.Enum.InterviewResult;
-import service.recrutement.Entity.Enum.InterviewStatus;
-import service.recrutement.Entity.Enum.InterviewType;
+import service.recrutement.Entity.Enum.*;
 
 import java.time.LocalDateTime;
 
+/**
+ * Entité unique pour tout entretien, qu'il soit créé librement depuis le
+ * calendrier RH (source = LIBRE) ou issu du workflow de candidature
+ * (source = CANDIDATURE, applicationId renseigné).
+ */
 @Document(collection = "interviews")
 @Getter
 @Setter
@@ -24,26 +26,49 @@ public class Interview {
 
     @Id
     String idInterview;
-    InterviewMode mode;
+
+    @Indexed
+    InterviewSource source;
+
+    /** Renseigné uniquement si source == CANDIDATURE */
     @Indexed
     String applicationId;
 
+    /** Renseigné si le candidat est identifié (CANDIDATURE, ou LIBRE lié à un candidat existant) */
     @Indexed
     String candidatKeycloakId;
 
-    String recruteurKeycloakId;
+    String candidateName;
+    String candidateEmail;
 
+    String posteRecrutement;
+    String posteId;
+
+    /** Id Keycloak du recruteur si connu */
+    String recruteurKeycloakId;
+    /** Nom affiché de l'intervenant (toujours renseigné, même en LIBRE) */
+    String interviewerName;
+
+    /** null pour un entretien LIBRE */
     InterviewType type;
 
+    @Indexed
     LocalDateTime dateEntretien;
+
+    /** Fin de l'entretien. Si absent, on considère dateEntretien + 1h. */
+    LocalDateTime dateFinEntretien;
+
+    InterviewMode mode;
 
     String lieu;
     String lienVisio;
 
-    String notes;
-
+    @Indexed
     InterviewStatus statut;
+
     InterviewResult resultat;
+
+    String notes;
 
     LocalDateTime dateCreation;
     LocalDateTime dateModification;

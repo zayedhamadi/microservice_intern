@@ -5,40 +5,23 @@ import service.recrutement.Entity.Enum.*;
 
 @Getter
 @Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-@ToString
-public class InterviewDto {
-    private String id;
-    private InterviewSource source;
+public class CandidatEntretienTechniqueDto {
+    private String interviewId;
     private String applicationId;
     private String candidatKeycloakId;
-
     private String candidateName;
     private String candidateEmail;
-
-    private String posteRecrutement;
-    private String posteId;
-
-    private String recruteurKeycloakId;
-    private String interviewerName;
-
-    private InterviewType type;
-
-    private String interviewDate; // "yyyy-MM-dd"
-    private String startTime;     // "HH:mm"
-    private String endTime;       // "HH:mm"
-
+    private String interviewDate;
+    private String startTime;
+    private String endTime;
     private InterviewMode mode;
     private String location;
     private String meetingLink;
-
     private InterviewStatus status;
     private InterviewResult resultat;
-
     private String notes;
-
-    private String createdAt;
-    private String updatedAt;
+    private String interviewerName;
 }

@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.*;
 import service.recrutement.Entity.Enum.InterviewType;
 import service.recrutement.Entity.dto.*;
 import service.recrutement.Security.JwtExtractService;
-import service.recrutement.Service.CalendarInterviewService;
 import service.recrutement.Service.InterviewService;
 
 import java.util.List;
@@ -17,52 +16,72 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 public class InterviewController {
+
     private final InterviewService interviewService;
-    private final CalendarInterviewService calendarInterviewService;
     private final JwtExtractService jwtExtractService;
+
+    @GetMapping("/rh/api/entretiens/mes-candidats-techniques")
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    public ResponseEntity<List<CandidatEntretienTechniqueDto>> getMesCandidatsTechniques(Authentication auth) {
+        return ResponseEntity.ok(interviewService.getMesCandidatsTechniques(jwtExtractService.extractKeycloakId(auth)));
+    }
+
+    @GetMapping("/interviews/mes-entretiens")
+    @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
+    public ResponseEntity<List<InterviewDto>> getMesEntretiens(Authentication auth) {
+        return ResponseEntity.ok(interviewService.getMesEntretiens(jwtExtractService.extractKeycloakId(auth)));
+    }
 
     @GetMapping("/interviews")
     @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
-    public ResponseEntity<List<CalendarInterviewDto>> getAllCalendar() {
-        return ResponseEntity.ok(calendarInterviewService.getAll());
-    }
-
-    @GetMapping("/rh/api/entretiens")
-    @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
-    public ResponseEntity<List<CalendarInterviewDto>> getAllEntretiensForCalendar() {
-        return ResponseEntity.ok(interviewService.getAllRecrutementAsCalendar());
+    public ResponseEntity<List<InterviewDto>> getAll() {
+        return ResponseEntity.ok(interviewService.getAll());
     }
 
     @GetMapping("/interviews/{id}")
     @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
-    public ResponseEntity<CalendarInterviewDto> getById(@PathVariable String id) {
-        return ResponseEntity.ok(calendarInterviewService.getById(id));
+    public ResponseEntity<InterviewDto> getById(@PathVariable String id) {
+        return ResponseEntity.ok(interviewService.getById(id));
     }
 
     @PostMapping("/interviews")
     @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
-    public ResponseEntity<CalendarInterviewDto> create(@Valid @RequestBody CalendarInterviewDto dto) {
-        return ResponseEntity.ok(calendarInterviewService.create(dto));
+    public ResponseEntity<InterviewDto> create(@RequestBody InterviewDto dto, Authentication auth) {
+        return ResponseEntity.ok(interviewService.createLibre(dto, jwtExtractService.extractKeycloakId(auth)));
     }
 
     @PutMapping("/interviews/{id}")
     @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
-    public ResponseEntity<CalendarInterviewDto> update(@PathVariable String id, @Valid @RequestBody CalendarInterviewDto dto) {
-        return ResponseEntity.ok(calendarInterviewService.update(id, dto));
+    public ResponseEntity<InterviewDto> update(@PathVariable String id, @RequestBody InterviewDto dto, Authentication auth) {
+        return ResponseEntity.ok(interviewService.updateLibre(id, dto, jwtExtractService.extractKeycloakId(auth)));
     }
 
     @DeleteMapping("/interviews/{id}")
     @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
     public ResponseEntity<Void> delete(@PathVariable String id) {
-        calendarInterviewService.delete(id);
+        interviewService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/rh/api/entretiens")
+    @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
+    public ResponseEntity<List<InterviewDto>> getAllRecrutement() {
+        return ResponseEntity.ok(interviewService.getAllCandidature());
+    }
+
+    @GetMapping("/rh/api/entretiens/techniques-par-poste")
+    @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
+    public ResponseEntity<List<PosteEntretiensTechniquesDto>> getEntretiensTechniquesParPoste() {
+        return ResponseEntity.ok(interviewService.getEntretiensTechniquesParPoste());
     }
 
     @GetMapping("/interviews/stats")
     @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
-    public ResponseEntity<List<CalendarInterviewStatsDto>> stats() {
-        return ResponseEntity.ok(calendarInterviewService.getStats());
+    public ResponseEntity<List<InterviewStatsDto>> stats() {
+        return ResponseEntity.ok(interviewService.getStats());
     }
+
+    // ==================== Workflow candidature ====================
 
     @PostMapping("/rh/api/candidatures/{id}/entretiens/rh-initial")
     @PreAuthorize("hasRole('RH')")

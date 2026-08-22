@@ -26,7 +26,12 @@ import java.util.stream.Collectors;
 @Slf4j
 @RequiredArgsConstructor
 public class ApplyService {
-
+    private final ApplicationRepository applicationRepository;
+    private final FileUserService fileUserService;
+    private final UserServiceClient userServiceClient;
+    private final RecrutementMail recrutementMail;
+    private final RankingClient rankingClient;
+    private final PosteRecrutementService posteRecrutementService;
     private static final long MAX_CV_SIZE = 10L * 1024 * 1024;
     private static final long MAX_LETTRE_SIZE = 10L * 1024 * 1024;
     private static final Map<ApplicationStatus, Set<ApplicationStatus>> TRANSITIONS_AUTORISEES = new EnumMap<>(ApplicationStatus.class);
@@ -46,13 +51,11 @@ public class ApplyService {
         TRANSITIONS_AUTORISEES.put(ApplicationStatus.REJETE, EnumSet.noneOf(ApplicationStatus.class));
         TRANSITIONS_AUTORISEES.put(ApplicationStatus.RETIRE, EnumSet.noneOf(ApplicationStatus.class));
     }
-
-    private final ApplicationRepository applicationRepository;
-    private final FileUserService fileUserService;
-    private final UserServiceClient userServiceClient;
-    private final RecrutementMail recrutementMail;
-    private final RankingClient rankingClient;
-    private final PosteRecrutementService posteRecrutementService; // déjà injecté ailleurs
+    private static final Set<ApplicationStatus> STATUTS_RESERVES_AU_WORKFLOW_ENTRETIEN = EnumSet.of(
+            ApplicationStatus.EN_ENTRETIEN_RH,
+            ApplicationStatus.EN_ENTRETIEN_TECHNIQUE,
+            ApplicationStatus.EN_ENTRETIEN_FINAL
+    );
 
     public List<ApplicationDto> getCandidaturesClasseesPourPoste(String posteId) {
         PosteRecrutement poste = posteRecrutementService.getById(posteId);
@@ -114,7 +117,6 @@ public class ApplyService {
         log.info("DEBUG candidat={} → userServiceOk={} snapshotCompetences={}",
                 a.getCandidatKeycloakId(), c != null, a.getCompetences());
         if (c == null) {
-            // fallback sur le snapshot stocké dans la candidature elle-même
             return MlCandidatDto.builder()
                     .keycloakId(a.getCandidatKeycloakId())
                     .competences(a.getCompetences())
@@ -168,9 +170,7 @@ public class ApplyService {
         return saveCandidature(application, poste);
     }
 
-    /**
-     * Postuler avec un CV téléversé spécifiquement pour cette candidature.
-     */
+
     @Transactional
     public ApplicationDto postulerAvecNouveauCv(
             String candidatKeycloakId, String posteId, MultipartFile cvFile,
@@ -196,13 +196,7 @@ public class ApplyService {
         return saveCandidature(application, poste);
     }
 
-    /**
-     * Retourne le document à sauvegarder pour une nouvelle candidature :
-     * - s'il n'existe aucune candidature du candidat pour ce poste, en crée une nouvelle ;
-     * - si une candidature RETIRE existe déjà (contrainte d'unicité candidat+poste),
-     * elle est réactivée (repassée à EN_ATTENTE) au lieu de créer un doublon ;
-     * - si une candidature active (tout autre statut) existe déjà, on refuse.
-     */
+
     private Application prepareApplicationForSubmission(
             String candidatKeycloakId, PosteRecrutement poste, CandidatDto candidat, String lettreMotivationTexte) {
 
@@ -312,10 +306,7 @@ public class ApplyService {
         }
     }
 
-    /**
-     * Modification d'une candidature par son propriétaire — uniquement autorisée
-     * tant qu'elle est EN_ATTENTE (avant toute action du RH).
-     */
+
     @Transactional
     public ApplicationDto modifierCandidature(
             String idApplication, String candidatKeycloakId, String lettreMotivationTexte,
@@ -357,9 +348,7 @@ public class ApplyService {
         return toDto(saved);
     }
 
-    /**
-     * Retourne (bytes, fileName) — sécurisé : réservé au propriétaire de la candidature ou au RH.
-     */
+
     public Application getApplicationPourTelechargementLettre(String idApplication, String requesterKeycloakId, boolean isRH) {
         Application application = getApplicationOuException(idApplication);
 
@@ -414,18 +403,35 @@ public class ApplyService {
             String recruteurKeycloakId) {
 
         if (nouveauStatut == null) {
+            throw new TransitionStatutInvalideException("Le nouveau statut est obligatoire");
+        }
+
+        if (STATUTS_RESERVES_AU_WORKFLOW_ENTRETIEN.contains(nouveauStatut)) {
+
             throw new TransitionStatutInvalideException(
-                    "Le nouveau statut est obligatoire"
+                    "Ce statut ne peut être atteint qu'en planifiant un entretien depuis l'onglet Entretiens"
             );
         }
 
         if (nouveauStatut == ApplicationStatus.REJETE
                 && (commentaireRH == null || commentaireRH.isBlank())) {
-
             throw new TransitionStatutInvalideException(
                     "Un commentaire RH est obligatoire pour rejeter une candidature"
             );
         }
+
+        Application application = getApplicationOuException(idApplication);
+        changerStatutInterne(application, nouveauStatut, commentaireRH, recruteurKeycloakId);
+        notifyCandidatChangementStatut(application);
+        return toDto(application);
+    }
+
+    @Transactional
+    public ApplicationDto changerStatutSysteme(
+            String idApplication,
+            ApplicationStatus nouveauStatut,
+            String commentaire,
+            String auteurKeycloakId) {
 
         Application application =
                 getApplicationOuException(idApplication);
@@ -433,8 +439,8 @@ public class ApplyService {
         changerStatutInterne(
                 application,
                 nouveauStatut,
-                commentaireRH,
-                recruteurKeycloakId
+                commentaire,
+                auteurKeycloakId
         );
 
         notifyCandidatChangementStatut(application);
@@ -442,27 +448,6 @@ public class ApplyService {
         return toDto(application);
     }
 
-  @Transactional
-public ApplicationDto changerStatutSysteme(
-        String idApplication,
-        ApplicationStatus nouveauStatut,
-        String commentaire,
-        String auteurKeycloakId) {
-
-    Application application =
-            getApplicationOuException(idApplication);
-
-    changerStatutInterne(
-            application,
-            nouveauStatut,
-            commentaire,
-            auteurKeycloakId
-    );
-
-    notifyCandidatChangementStatut(application);
-
-    return toDto(application);
-}
     private void changerStatutInterne(
             Application application,
             ApplicationStatus nouveauStatut,

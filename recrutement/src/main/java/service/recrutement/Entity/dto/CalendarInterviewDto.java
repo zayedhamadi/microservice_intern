@@ -9,8 +9,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
-import service.recrutement.Entity.Enum.CalendarInterviewMode;
-import service.recrutement.Entity.Enum.CalendarInterviewStatus;
 
 @Getter
 @Setter
@@ -45,14 +43,14 @@ public class CalendarInterviewDto {
     @NotNull(message = "L'heure de fin est requise")
     private String endTime; // "HH:mm"
 
-    @NotNull(message = "Le mode est requis")
-    private CalendarInterviewMode mode;
+//    @NotNull(message = "Le mode est requis")
+//    private CalendarInterviewMode mode;
 
     private String location;
     private String meetingLink;
 
-    @NotNull(message = "Le statut est requis")
-    private CalendarInterviewStatus status;
+//    @NotNull(message = "Le statut est requis")
+//    private CalendarInterviewStatus status;
 
     private String notes;
 
