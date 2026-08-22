@@ -30,11 +30,9 @@ public class Interview {
     @Indexed
     InterviewSource source;
 
-    /** Renseigné uniquement si source == CANDIDATURE */
     @Indexed
     String applicationId;
 
-    /** Renseigné si le candidat est identifié (CANDIDATURE, ou LIBRE lié à un candidat existant) */
     @Indexed
     String candidatKeycloakId;
 

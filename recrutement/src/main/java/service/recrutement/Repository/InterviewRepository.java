@@ -7,10 +7,19 @@ import service.recrutement.Entity.Enum.InterviewStatus;
 import service.recrutement.Entity.Enum.InterviewType;
 import service.recrutement.Entity.Interview;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface InterviewRepository extends MongoRepository<Interview, String> {
+    List<Interview> findByCandidatKeycloakId(String candidatKeycloakId);
+
+    List<Interview> findByCandidatKeycloakIdAndType(String candidatKeycloakId, InterviewType type);
+
+    Optional<Interview> findFirstByCandidatKeycloakIdAndDateEntretienAfterOrderByDateEntretienAsc(
+            String candidatKeycloakId, LocalDateTime after);
+
     List<Interview> findByRecruteurKeycloakIdOrderByDateEntretienAsc(String recruteurKeycloakId);
 
     List<Interview> findByRecruteurKeycloakIdAndTypeAndSource(
