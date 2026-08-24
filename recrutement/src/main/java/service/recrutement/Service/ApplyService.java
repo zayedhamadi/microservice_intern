@@ -394,7 +394,44 @@ public class ApplyService {
     public long countCandidaturesPourPoste(String posteId) {
         return applicationRepository.countByPosteRecrutementId(posteId);
     }
+/**
+ * BUG évité : REJETE n'a normalement aucune transition sortante autorisée
+ * (voir TRANSITIONS_AUTORISEES). Cette méthode contourne volontairement
+ * cette règle, mais UNIQUEMENT pour réactiver une candidature rejetée suite
+ * à une absence à l'entretien, après acceptation RH d'une demande de
+ * réactivation (voir ReprogrammerService). Ne jamais l'exposer directement
+ * en API publique.
+ */
+@Transactional
+public ApplicationDto reactiverApresAbsence(
+        String idApplication, ApplicationStatus statutCible, String commentaire, String auteurKeycloakId) {
 
+    Application application = getApplicationOuException(idApplication);
+
+    if (application.getStatut() != ApplicationStatus.REJETE) {
+        throw new TransitionStatutInvalideException(
+                "Seule une candidature rejetée suite à une absence peut être réactivée");
+    }
+
+    LocalDateTime now = LocalDateTime.now();
+    application.setStatut(statutCible);
+    application.setDateDernierChangementStatut(now);
+    application.setCommentaireRH(commentaire != null && !commentaire.isBlank() ? commentaire.trim() : null);
+
+    if (application.getHistoriqueStatuts() == null) {
+        application.setHistoriqueStatuts(new ArrayList<>());
+    }
+    application.getHistoriqueStatuts().add(StatusChange.builder()
+            .statut(statutCible)
+            .date(now)
+            .commentaire(commentaire)
+            .auteurKeycloakId(auteurKeycloakId)
+            .build());
+
+    Application saved = applicationRepository.save(application);
+    notifyCandidatChangementStatut(saved);
+    return toDto(saved);
+}
     @Transactional
     public ApplicationDto changerStatutParRH(
             String idApplication,

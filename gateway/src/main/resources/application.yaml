@@ -92,6 +92,10 @@ spring:
               uri: lb://RECRUTEMENT-SERVICE
               predicates:
                 - Path=/candidat/api/entretiens/**
+            - id: recrutement-service-entretiens-candidatt-report
+              uri: lb://RECRUTEMENT-SERVICE
+              predicates:
+                - Path=/rh/api/entretiens/**
 
 
     loadbalancer:

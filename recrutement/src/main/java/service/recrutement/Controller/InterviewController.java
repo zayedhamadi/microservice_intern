@@ -100,12 +100,72 @@ public class InterviewController {
     public ResponseEntity<InterviewDto> rhFinal(@PathVariable String id, @Valid @RequestBody PlanifierEntretienDto dto, Authentication auth) {
         return ResponseEntity.ok(interviewService.planifierEntretien(id, InterviewType.RH_FINAL, dto, jwtExtractService.extractKeycloakId(auth)));
     }
+@PatchMapping("/rh/api/entretiens/{interviewId}/annuler")
+@PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
+public ResponseEntity<InterviewDto> annuler(
+        @PathVariable String interviewId,
+        @RequestBody(required = false) AnnulerEntretienDto dto, // crée ce petit DTO si besoin, ou passe juste un @RequestParam String motif
+        Authentication auth) {
 
-    @PatchMapping("/rh/api/entretiens/{interviewId}/resultat")
-    @PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
-    public ResponseEntity<InterviewDto> resultat(@PathVariable String interviewId, @Valid @RequestBody ResultatEntretienDto dto, Authentication auth) {
-        return ResponseEntity.ok(interviewService.enregistrerResultat(interviewId, dto, jwtExtractService.extractKeycloakId(auth)));
-    }
+    boolean isRH = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_RH"));
+
+    String motif = dto != null ? dto.getMotif() : null;
+
+    return ResponseEntity.ok(interviewService.annulerEntretien(
+            interviewId,
+            motif,
+            jwtExtractService.extractKeycloakId(auth),
+            isRH));
+}
+
+@PatchMapping("/rh/api/entretiens/{interviewId}/absent")
+@PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
+public ResponseEntity<InterviewDto> marquerAbsent(
+        @PathVariable String interviewId,
+        Authentication auth) {
+
+    boolean isRH = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_RH"));
+
+    return ResponseEntity.ok(interviewService.marquerAbsent(
+            interviewId,
+            jwtExtractService.extractKeycloakId(auth),
+            isRH));
+}
+
+@PatchMapping("/rh/api/entretiens/{interviewId}/reporter")
+@PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
+public ResponseEntity<InterviewDto> reporter(
+        @PathVariable String interviewId,
+        @Valid @RequestBody ReporterEntretienDto dto, // { LocalDateTime nouvelleDate }
+        Authentication auth) {
+
+    boolean isRH = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_RH"));
+
+    return ResponseEntity.ok(interviewService.reporterEntretien(
+            interviewId,
+            dto.getNouvelleDate(),
+            jwtExtractService.extractKeycloakId(auth),
+            isRH));
+}
+ @PatchMapping("/rh/api/entretiens/{interviewId}/resultat")
+@PreAuthorize("hasAnyRole('RH','EMPLOYEE')")
+public ResponseEntity<InterviewDto> resultat(
+        @PathVariable String interviewId,
+        @Valid @RequestBody ResultatEntretienDto dto,
+        Authentication auth) {
+
+    boolean isRH = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_RH"));
+
+    return ResponseEntity.ok(interviewService.enregistrerResultat(
+            interviewId,
+            dto,
+            jwtExtractService.extractKeycloakId(auth),
+            isRH));
+}
 
     @GetMapping("/rh/api/candidatures/{id}/entretiens")
     @PreAuthorize("hasAnyRole('CANDIDAT','RH','EMPLOYEE')")

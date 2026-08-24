@@ -14,6 +14,9 @@ import service.recrutement.Entity.dto.DepartementDto;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
@@ -22,7 +25,8 @@ public class UserServiceClient {
     private final RestTemplate restTemplate;
     private final String userServiceUrl;
     private final String internalApiKey;
-
+    private final Map<String, String> displayNameCache = new ConcurrentHashMap<>();
+    private final Set<String> directoryNameMisses = ConcurrentHashMap.newKeySet();
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
 
     public UserServiceClient(RestTemplate restTemplate,

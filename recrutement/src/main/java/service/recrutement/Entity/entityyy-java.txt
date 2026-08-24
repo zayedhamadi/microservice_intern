@@ -1,36 +1,6 @@
 ﻿
 
 ============================================================
-FILE: C:\stage\recrutement\src\main\java\service\recrutement\Entity\aaaa.java
-============================================================
-
-package service.recrutement.Entity;
-
-//import lombok.*;
-//import lombok.experimental.FieldDefaults;
-//import service.recrutement.Entity.Enum.DemandeReportStatus;
-//
-//import java.time.LocalDateTime;
-//
-//@Getter
-//@Setter
-//@NoArgsConstructor
-//@AllArgsConstructor
-//@Builder
-//@ToString
-//@FieldDefaults(level = AccessLevel.PRIVATE)
-public class aaaa {
-
-//    LocalDateTime dateProposee;
-//    String motif;
-//    DemandeReportStatus statut;
-//    LocalDateTime dateDemande;
-//    LocalDateTime dateTraitement;
-//    String commentaireRH;
-}
-
-
-============================================================
 FILE: C:\stage\recrutement\src\main\java\service\recrutement\Entity\Application.java
 ============================================================
 
@@ -39,6 +9,7 @@ package service.recrutement.Entity;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -69,6 +40,16 @@ public class Application {
 
     @Id
     String idApplication;
+
+    /**
+     * Verrou optimiste. BUG FIX : sans ce champ, deux Ã©critures concurrentes
+     * (ex : RH qui change le statut pendant que le candidat retire sa
+     * candidature) s'Ã©crasent silencieusement l'une l'autre ("last write
+     * wins"). Spring Data lÃ¨vera une OptimisticLockingFailureException en
+     * cas de conflit, Ã  traiter cÃ´tÃ© service/contrÃ´leur.
+     */
+    @Version
+    Long version;
 
     @Indexed
     String candidatKeycloakId;
@@ -101,6 +82,15 @@ public class Application {
     @Indexed
     ApplicationStatus statut;
 
+    /**
+     * @deprecated non maintenu par le workflow actuel (ApplicationStatus
+     * porte dÃ©sormais cette information via EN_ENTRETIEN_RH /
+     * EN_ENTRETIEN_TECHNIQUE / EN_ENTRETIEN_FINAL). ConservÃ© uniquement
+     * pour compatibilitÃ© binaire avec l'existant. Ã€ supprimer dÃ¨s que vous
+     * avez confirmÃ© qu'aucun autre composant (front, autre microservice,
+     * export) ne le lit ou ne l'Ã©crit.
+     */
+    @Deprecated
     EtatEntretien etatEntretien;
 
     LocalDate dateCandidature;
@@ -114,6 +104,17 @@ public class Application {
 
     @Builder.Default
     List<StatusChange> historiqueStatuts = new ArrayList<>();
+
+    /**
+     * BUG FIX : incrÃ©mentÃ© Ã  chaque redÃ©pÃ´t aprÃ¨s un retrait
+     * (RETIRE -> EN_ATTENTE, voir ApplyService#prepareApplicationForSubmission).
+     * Comme idApplication est rÃ©utilisÃ© lors d'un redÃ©pÃ´t, ce compteur
+     * permet Ã  InterviewService de distinguer les entretiens du cycle
+     * courant de ceux d'un cycle prÃ©cÃ©dent et d'Ã©viter qu'ils se
+     * mÃ©langent dans l'UI du RH.
+     */
+    @Builder.Default
+    Integer cycleCandidature = 1;
 }
 
 
@@ -254,6 +255,7 @@ package service.recrutement.Entity;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import service.recrutement.Entity.Enum.*;
@@ -277,6 +279,12 @@ public class Interview {
 
     @Id
     String idInterview;
+
+    /**
+     * Verrou optimiste (BUG FIX : absent auparavant).
+     */
+    @Version
+    Long version;
 
     @Indexed
     InterviewSource source;
@@ -321,6 +329,28 @@ public class Interview {
 
     LocalDateTime dateCreation;
     LocalDateTime dateModification;
+
+    /**
+     * BUG FIX (race condition) : clÃ© non nulle UNIQUEMENT quand l'entretien
+     * est actif (PLANIFIE ou REPORTE), au format
+     * "{applicationId}|{type}|{cycleCandidature}". CombinÃ©e Ã  l'index
+     * unique sparse ci-dessous, elle garantit â€” de faÃ§on atomique cÃ´tÃ©
+     * base de donnÃ©es, contrairement Ã  un simple "exists puis save" cÃ´tÃ©
+     * application â€” qu'il ne peut jamais exister deux entretiens actifs du
+     * mÃªme type pour la mÃªme candidature/cycle, mÃªme en cas d'appels
+     * concurrents. Doit Ãªtre vidÃ©e (null) dÃ¨s que l'entretien quitte l'Ã©tat
+     * actif (TERMINE, ANNULE, ABSENT) : voir InterviewService.
+     */
+    @Indexed(unique = true, sparse = true)
+    String activeSlotKey;
+
+    /**
+     * BUG FIX : numÃ©ro de cycle de candidature (voir Application#cycleCandidature)
+     * auquel cet entretien est rattachÃ©. Ã‰vite qu'un entretien d'un dÃ©pÃ´t
+     * prÃ©cÃ©dent (candidature retirÃ©e puis redÃ©posÃ©e) ne se mÃ©lange avec le
+     * cycle courant dans les listings RH.
+     */
+    Integer cycleCandidature;
 }
 
 
@@ -451,6 +481,65 @@ public class PosteRecrutement {
                 && (dateExpirationPosteRecrutement == null || !dateExpirationPosteRecrutement.isBefore(LocalDate.now()));
     }
 }
+
+
+============================================================
+FILE: C:\stage\recrutement\src\main\java\service\recrutement\Entity\Reprogrammer.java
+============================================================
+
+package service.recrutement.Entity;
+import lombok.*;
+import lombok.experimental.FieldDefaults;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Version;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+import service.recrutement.Entity.Enum.ApplicationStatus;
+import service.recrutement.Entity.Enum.EtatEntretien;
+import service.recrutement.Entity.dto.StatusChange;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Document(collection = "Reprogrammer")
+@CompoundIndexes({
+        @CompoundIndex(name = "candidat_poste_unique", def = "{'candidatKeycloakId': 1, 'posteRecrutementId': 1}", unique = true)
+})
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@ToString
+@FieldDefaults(level = AccessLevel.PRIVATE)
+public class Reprogrammer {
+
+    @Id
+    String idReprogrammer;
+
+}
+
+
+============================================================
+FILE: C:\stage\recrutement\src\main\java\service\recrutement\Entity\dto\AnnulerEntretienDto.java
+============================================================
+
+package service.recrutement.Entity.dto;
+
+
+import lombok.*;
+
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class AnnulerEntretienDto {
+    private String motif;
+}
+
 
 
 ============================================================
@@ -891,6 +980,43 @@ public class MlPosteDto {
 
 
 ============================================================
+FILE: C:\stage\recrutement\src\main\java\service\recrutement\Entity\dto\PageResponseDto.java
+============================================================
+
+package service.recrutement.Entity.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import org.springframework.data.domain.Page;
+
+import java.util.List;
+
+@Getter
+@Builder
+@AllArgsConstructor
+public class PageResponseDto<T> {
+    private List<T> content;
+    private int page;
+    private int size;
+    private long totalElements;
+    private int totalPages;
+    private boolean last;
+
+    public static <T> PageResponseDto<T> from(Page<T> page) {
+        return PageResponseDto.<T>builder()
+                .content(page.getContent())
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .last(page.isLast())
+                .build();
+    }
+}
+
+
+============================================================
 FILE: C:\stage\recrutement\src\main\java\service\recrutement\Entity\dto\PlanifierEntretienDto.java
 ============================================================
 
@@ -1072,6 +1198,48 @@ public class PosteRecrutementDto {
 
     private LocalDate datePosteRecrutement;
     private LocalDate dateExpirationPosteRecrutement;
+}
+
+
+============================================================
+FILE: C:\stage\recrutement\src\main\java\service\recrutement\Entity\dto\ReporterEntretienDto.java
+============================================================
+
+package service.recrutement.Entity.dto;
+
+import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.NotNull;
+
+import lombok.*;
+
+import java.time.LocalDateTime;
+
+@Getter @Setter @NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ReporterEntretienDto {
+    @NotNull(message = "La nouvelle date est obligatoire")
+    @Future(message = "La nouvelle date doit Ãªtre dans le futur")
+    private LocalDateTime nouvelleDate;
+}
+
+
+============================================================
+FILE: C:\stage\recrutement\src\main\java\service\recrutement\Entity\dto\ReprogrammerDto.java
+============================================================
+
+package service.recrutement.Entity.dto;
+
+import lombok.*;
+import lombok.experimental.FieldDefaults;
+
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@FieldDefaults(level = AccessLevel.PRIVATE)
+public class ReprogrammerDto {
 }
 
 
@@ -1315,4 +1483,41 @@ public enum WorkType {
     SUR_SITE,
     HYBRIDE,
     DISTANCE
+}
+
+
+============================================================
+FILE: C:\stage\recrutement\src\main\java\service\recrutement\Entity\Event\ApplicationInterviewsShouldCloseEvent.java
+============================================================
+
+package service.recrutement.Entity.Event;
+
+import lombok.Getter;
+
+/**
+ * PubliÃ© par ApplyService quand une candidature quitte son cycle actuel
+ * (retrait par le candidat, ou redÃ©pÃ´t aprÃ¨s retrait) et que tout entretien
+ * encore actif (PLANIFIE/REPORTE) rattachÃ© Ã  cette candidature doit Ãªtre
+ * clÃ´turÃ© automatiquement.
+ *
+ * BUG FIX : avant ce correctif, rien ne fermait les entretiens actifs lors
+ * d'un retrait de candidature ni lors d'un redÃ©pÃ´t (qui rÃ©utilise le mÃªme
+ * idApplication) â€” ce qui pouvait laisser un entretien PLANIFIE fantÃ´me
+ * bloquant dÃ©finitivement la crÃ©ation d'un nouvel entretien du mÃªme type
+ * (via l'index unique activeSlotKey) et mÃ©langer l'historique de deux
+ * cycles de candidature.
+ *
+ * Utiliser un Ã©vÃ©nement plutÃ´t qu'un appel direct ApplyService -> InterviewService
+ * Ã©vite une dÃ©pendance circulaire (InterviewService dÃ©pend dÃ©jÃ  d'ApplyService).
+ */
+@Getter
+public class ApplicationInterviewsShouldCloseEvent {
+
+    private final String applicationId;
+    private final String motif;
+
+    public ApplicationInterviewsShouldCloseEvent(String applicationId, String motif) {
+        this.applicationId = applicationId;
+        this.motif = motif;
+    }
 }

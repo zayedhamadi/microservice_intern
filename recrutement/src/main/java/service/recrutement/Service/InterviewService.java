@@ -2,8 +2,11 @@ package service.recrutement.Service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import service.recrutement.Client.UserServiceClient;
 import service.recrutement.Entity.Application;
 import service.recrutement.Entity.Enum.*;
 import service.recrutement.Entity.Interview;
@@ -12,6 +15,7 @@ import service.recrutement.Entity.dto.InterviewStatsDto;
 import service.recrutement.Entity.dto.InterviewDto;
 import service.recrutement.Entity.dto.PlanifierEntretienDto;
 import service.recrutement.Entity.dto.ResultatEntretienDto;
+import service.recrutement.Entity.Event.ApplicationInterviewsShouldCloseEvent;
 import service.recrutement.Exception.AccesNonAutoriseException;
 import service.recrutement.Exception.CandidatureNotFoundException;
 import service.recrutement.Exception.TransitionStatutInvalideException;
@@ -23,23 +27,35 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 
 import service.recrutement.Entity.dto.CandidatEntretienTechniqueDto;
 import service.recrutement.Entity.dto.PosteEntretiensTechniquesDto;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import service.recrutement.Entity.dto.CandidatDto;
+
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class InterviewService {
-
+    private final Map<String, String> displayNameCache = new ConcurrentHashMap<>();
+    private final Set<String> directoryNameMisses = ConcurrentHashMap.newKeySet();
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
     private final ApplicationRepository applicationRepository;
     private final InterviewRepository interviewRepository;
     private final ApplyService applyService;
     private final PosteRecrutementService posteRecrutementService;
     private final RecrutementMail recrutementMail;
+    private final UserServiceClient userServiceClient;
+
+    private static final Set<InterviewStatus> STATUTS_ACTIFS =
+            EnumSet.of(InterviewStatus.PLANIFIE, InterviewStatus.REPORTE);
 
     // ==================== ENTRETIENS LIBRES (créés depuis le calendrier) ====================
 
@@ -54,8 +70,11 @@ public class InterviewService {
         interview.setApplicationId(null);
         interview.setType(null);
         interview.setRecruteurKeycloakId(auteurKeycloakId); // jamais depuis le dto client
+        interview.setInterviewerName(resolveDisplayName(auteurKeycloakId, dto.getInterviewerName()));
         interview.setDateCreation(now);
         interview.setDateModification(now);
+        // Un entretien LIBRE n'est pas concerné par le mécanisme anti-doublon
+        // applicationId/type (il n'a ni l'un ni l'autre) : pas d'activeSlotKey.
 
         return toDto(interviewRepository.save(interview));
     }
@@ -67,6 +86,7 @@ public class InterviewService {
 
         Interview maj = fromDto(dto);
         maj.setIdInterview(existant.getIdInterview());
+        maj.setVersion(existant.getVersion());
         maj.setSource(existant.getSource());
         maj.setApplicationId(existant.getApplicationId());
         maj.setType(existant.getType());
@@ -75,15 +95,34 @@ public class InterviewService {
         // on l'attribue à celui qui modifie ; sinon on conserve le propriétaire d'origine
         maj.setRecruteurKeycloakId(
                 existant.getRecruteurKeycloakId() != null ? existant.getRecruteurKeycloakId() : auteurKeycloakId);
+        maj.setInterviewerName(
+                existant.getInterviewerName() != null && existant.getRecruteurKeycloakId() != null
+                        ? maj.getInterviewerName() // le dto peut légitimement renommer l'intervenant en LIBRE
+                        : resolveDisplayName(auteurKeycloakId, maj.getInterviewerName()));
         maj.setDateCreation(existant.getDateCreation());
         maj.setDateModification(LocalDateTime.now());
 
         return toDto(interviewRepository.save(maj));
     }
 
+    /**
+     * BUG FIX : l'ancienne implémentation supprimait n'importe quel entretien,
+     * y compris ceux issus du workflow de candidature (source = CANDIDATURE),
+     * ce qui laissait l'Application bloquée dans un statut EN_ENTRETIEN_*
+     * sans qu'aucun entretien n'existe plus, et détruisait toute trace pour
+     * l'audit. Seuls les entretiens LIBRE peuvent désormais être supprimés ;
+     * un entretien de candidature doit être annulé via {@link #annulerEntretien}
+     * pour conserver la traçabilité et faire revenir la candidature à un
+     * statut cohérent.
+     */
     @Transactional
     public void delete(String id) {
-        getEntityOuException(id); // vérifie que l'entretien existe
+        Interview interview = getEntityOuException(id);
+        if (interview.getSource() != InterviewSource.LIBRE) {
+            throw new TransitionStatutInvalideException(
+                    "Un entretien issu d'une candidature ne peut pas être supprimé : "
+                            + "utilisez l'annulation pour conserver la traçabilité");
+        }
         interviewRepository.deleteById(id);
     }
 
@@ -109,11 +148,14 @@ public class InterviewService {
 
         if (candidatures.isEmpty()) return List.of();
 
-        // 2) Interviews techniques déjà planifiées, indexées par applicationId
-        //    (peut ne pas exister si personne n'a encore cliqué "Planifier")
+        // 2) Interviews techniques déjà planifiées, indexées par applicationId.
+        //    BUG FIX : on ne garde que celles actives (PLANIFIE/REPORTE), sinon un
+        //    entretien TERMINE/ANNULE d'un cycle précédent pouvait s'afficher à la
+        //    place de l'entretien réellement en cours.
         Map<String, Interview> interviewParApplication = interviewRepository
                 .findByTypeAndSource(InterviewType.TECHNIQUE, InterviewSource.CANDIDATURE)
                 .stream()
+                .filter(i -> STATUTS_ACTIFS.contains(i.getStatut()))
                 .collect(Collectors.toMap(
                         Interview::getApplicationId,
                         i -> i,
@@ -165,29 +207,7 @@ public class InterviewService {
                     .status(InterviewStatus.PLANIFIE) // ou un statut dédié "A_PLANIFIER" si vous en ajoutez un
                     .build();
         }
-
-        LocalDate date = e.getDateEntretien() != null ? e.getDateEntretien().toLocalDate() : null;
-        LocalTime start = e.getDateEntretien() != null ? e.getDateEntretien().toLocalTime() : null;
-        LocalDateTime fin = e.getDateFinEntretien() != null ? e.getDateFinEntretien()
-                : (e.getDateEntretien() != null ? e.getDateEntretien().plusHours(1) : null);
-
-        return CandidatEntretienTechniqueDto.builder()
-                .interviewId(e.getIdInterview())
-                .applicationId(e.getApplicationId())
-                .candidatKeycloakId(e.getCandidatKeycloakId())
-                .candidateName(e.getCandidateName())
-                .candidateEmail(e.getCandidateEmail())
-                .interviewDate(date != null ? date.toString() : null)
-                .startTime(start != null ? start.format(TIME_FMT) : null)
-                .endTime(fin != null ? fin.toLocalTime().format(TIME_FMT) : null)
-                .mode(e.getMode())
-                .location(e.getLieu())
-                .meetingLink(e.getLienVisio())
-                .status(e.getStatut())
-                .resultat(e.getResultat())
-                .notes(e.getNotes())
-                .interviewerName(e.getInterviewerName())
-                .build();
+        return toCandidatTechniqueDto(e);
     }
 
     private CandidatEntretienTechniqueDto toCandidatTechniqueDto(Interview e) {
@@ -266,6 +286,13 @@ public class InterviewService {
 
         validerPlanification(type, dto);
 
+        int cycle = application.getCycleCandidature() != null ? application.getCycleCandidature() : 1;
+        String slotKey = calculerActiveSlotKey(idApplication, type, cycle);
+
+        // Contrôle "fast fail" pour un message d'erreur clair côté UI. Il reste
+        // intrinsèquement racy pris isolément (check-then-act) : la garantie
+        // définitive contre les doublons est l'index unique sparse sur
+        // Interview.activeSlotKey, voir le catch(DuplicateKeyException) plus bas.
         boolean dejaPlanifie = interviewRepository.existsByApplicationIdAndTypeAndStatutIn(
                 idApplication, type, List.of(InterviewStatus.PLANIFIE, InterviewStatus.REPORTE));
 
@@ -287,7 +314,8 @@ public class InterviewService {
                 .posteRecrutement(poste.getTitre())
                 .posteId(poste.getIdPosteRecrutement())
                 .recruteurKeycloakId(auteurKeycloakId)
-                .interviewerName(auteurKeycloakId)
+                // BUG FIX : on stockait l'UUID Keycloak brut comme "nom" affiché.
+                .interviewerName(resolveDisplayName(auteurKeycloakId, null))
                 .type(type)
                 .mode(dto.getMode())
                 .dateEntretien(dto.getDateEntretien())
@@ -297,9 +325,21 @@ public class InterviewService {
                 .statut(InterviewStatus.PLANIFIE)
                 .dateCreation(maintenant)
                 .dateModification(maintenant)
+                .cycleCandidature(cycle)
+                .activeSlotKey(slotKey)
                 .build();
 
-        Interview saved = interviewRepository.save(interview);
+        Interview saved;
+        try {
+            saved = interviewRepository.save(interview);
+        } catch (DuplicateKeyException e) {
+            // BUG FIX (race condition) : garantie ultime, atomique côté base,
+            // qu'on ne peut pas créer deux entretiens actifs identiques même
+            // en cas d'appels concurrents ayant tous les deux passé le
+            // contrôle "exists" ci-dessus.
+            throw new TransitionStatutInvalideException(
+                    "Un entretien " + libelle(type) + " est déjà en cours de planification pour cette candidature");
+        }
 
         ApplicationStatus nouveauStatut = statutEnCoursPour(type);
         if (application.getStatut() != nouveauStatut) {
@@ -333,42 +373,265 @@ public class InterviewService {
         }
     }
 
+    /**
+     * BUG FIX : contrôle d'autorisation absent auparavant — n'importe quel
+     * utilisateur authentifié pouvait clôturer le résultat de l'entretien de
+     * quelqu'un d'autre. Seul l'intervenant assigné (recruteurKeycloakId)
+     * peut enregistrer le résultat, sauf si isRH=true (rôle RH avec droit
+     * de passer outre, à adapter selon votre modèle de rôles).
+     * <p>
+     * NB : le contrôleur appelant cette méthode doit désormais transmettre
+     * isRH (ex: via les rôles Keycloak du principal courant).
+     */
     @Transactional
-    public InterviewDto enregistrerResultat(String idInterview, ResultatEntretienDto dto, String auteurKeycloakId) {
+    public InterviewDto enregistrerResultat(
+            String idInterview,
+            ResultatEntretienDto dto,
+            String auteurKeycloakId,
+            boolean isRH) {
+
         if (dto == null || dto.getResultat() == null) {
-            throw new TransitionStatutInvalideException("Le résultat de l'entretien est obligatoire");
+            throw new TransitionStatutInvalideException(
+                    "Le résultat de l'entretien est obligatoire");
         }
 
         Interview interview = getEntityOuException(idInterview);
 
-        if (interview.getStatut() != InterviewStatus.PLANIFIE && interview.getStatut() != InterviewStatus.REPORTE) {
-            throw new TransitionStatutInvalideException("Cet entretien ne peut plus recevoir de résultat");
+        // =========================================================
+        // CONTRÔLE D'AUTORISATION
+        // =========================================================
+
+        if (interview.getType() == InterviewType.RH_INITIAL
+                || interview.getType() == InterviewType.RH_FINAL) {
+
+            // RH_INITIAL et RH_FINAL → RH uniquement
+            if (!isRH) {
+                throw new AccesNonAutoriseException(
+                        "Seul un RH peut enregistrer le résultat de cet entretien");
+            }
+
+        } else if (interview.getType() == InterviewType.TECHNIQUE) {
+
+            // TECHNIQUE → Employee assigné uniquement
+            if (interview.getRecruteurKeycloakId() == null
+                    || !interview.getRecruteurKeycloakId().equals(auteurKeycloakId)) {
+
+                throw new AccesNonAutoriseException(
+                        "Seul l'employé assigné à cet entretien technique peut enregistrer le résultat");
+            }
         }
 
-        if (dto.getResultat() == InterviewResult.ECHOUE && estVide(dto.getNotes())) {
-            throw new TransitionStatutInvalideException("Une note est obligatoire lorsqu'un entretien est échoué");
+        // =========================================================
+        // VÉRIFICATION DU STATUT
+        // =========================================================
+
+        if (interview.getStatut() != InterviewStatus.PLANIFIE
+                && interview.getStatut() != InterviewStatus.REPORTE) {
+
+            throw new TransitionStatutInvalideException(
+                    "Cet entretien ne peut plus recevoir de résultat");
         }
+
+        // =========================================================
+        // VÉRIFICATION DU RÉSULTAT
+        // =========================================================
+
+        if (dto.getResultat() == InterviewResult.ECHOUE
+                && estVide(dto.getNotes())) {
+
+            throw new TransitionStatutInvalideException(
+                    "Une note est obligatoire lorsqu'un entretien est échoué");
+        }
+
+        // =========================================================
+        // TERMINER L'ENTRETIEN
+        // =========================================================
 
         interview.setStatut(InterviewStatus.TERMINE);
         interview.setResultat(dto.getResultat());
         interview.setNotes(normaliser(dto.getNotes()));
         interview.setDateModification(LocalDateTime.now());
 
+        // Libération du créneau anti-doublon
+        interview.setActiveSlotKey(null);
+
         Interview saved = interviewRepository.save(interview);
 
+        // =========================================================
+        // MISE À JOUR DE LA CANDIDATURE
+        // =========================================================
+
         if (saved.getApplicationId() != null) {
+
             if (dto.getResultat() == InterviewResult.ECHOUE) {
-                String commentaire = "Entretien " + libelle(saved.getType()) + " non concluant";
-                if (!estVide(dto.getNotes())) commentaire += " : " + dto.getNotes().trim();
-                applyService.changerStatutSysteme(saved.getApplicationId(), ApplicationStatus.REJETE, commentaire, auteurKeycloakId);
+
+                String commentaire =
+                        "Entretien " + libelle(saved.getType()) + " non concluant";
+
+                if (!estVide(dto.getNotes())) {
+                    commentaire += " : " + dto.getNotes().trim();
+                }
+
+                applyService.changerStatutSysteme(
+                        saved.getApplicationId(),
+                        ApplicationStatus.REJETE,
+                        commentaire,
+                        auteurKeycloakId
+                );
+
             } else {
-                ApplicationStatus prochainStatut = statutApresReussite(saved.getType());
-                applyService.changerStatutSysteme(saved.getApplicationId(), prochainStatut,
-                        "Entretien " + libelle(saved.getType()) + " réussi", auteurKeycloakId);
+
+                ApplicationStatus prochainStatut =
+                        statutApresReussite(saved.getType());
+
+                applyService.changerStatutSysteme(
+                        saved.getApplicationId(),
+                        prochainStatut,
+                        "Entretien " + libelle(saved.getType()) + " réussi",
+                        auteurKeycloakId
+                );
             }
         }
 
         return toDto(saved);
+    }
+
+    /**
+     * BUG FIX : transition ANNULE absente du service alors que le enum
+     * InterviewStatus la prévoit. Annule un entretien de candidature encore
+     * actif, libère le créneau anti-doublon et fait revenir la candidature
+     * au statut "éligible à planifier" du type concerné, pour qu'un nouvel
+     * entretien puisse être replanifié.
+     */
+    @Transactional
+    public InterviewDto annulerEntretien(String idInterview, String motif, String auteurKeycloakId, boolean isRH) {
+        Interview interview = getEntityOuException(idInterview);
+
+        if (!isRH
+                && interview.getRecruteurKeycloakId() != null
+                && !interview.getRecruteurKeycloakId().equals(auteurKeycloakId)) {
+            throw new AccesNonAutoriseException(
+                    "Seul l'intervenant assigné à cet entretien peut l'annuler");
+        }
+
+        if (!STATUTS_ACTIFS.contains(interview.getStatut())) {
+            throw new TransitionStatutInvalideException("Seul un entretien planifié ou reporté peut être annulé");
+        }
+
+        interview.setStatut(InterviewStatus.ANNULE);
+        interview.setNotes(motif != null ? motif : interview.getNotes());
+        interview.setDateModification(LocalDateTime.now());
+        interview.setActiveSlotKey(null);
+
+        Interview saved = interviewRepository.save(interview);
+
+        if (saved.getApplicationId() != null && saved.getType() != null) {
+            Application application = applyService.getApplicationOuException(saved.getApplicationId());
+            ApplicationStatus retour = statutRequisPourPlanifier(saved.getType());
+            if (application.getStatut() != retour
+                    && application.getStatut() != ApplicationStatus.RETIRE
+                    && application.getStatut() != ApplicationStatus.REJETE) {
+                applyService.changerStatutSysteme(saved.getApplicationId(), retour,
+                        "Entretien " + libelle(saved.getType()) + " annulé"
+                                + (motif != null ? " : " + motif : ""), auteurKeycloakId);
+            }
+        }
+
+        return toDto(saved);
+    }
+
+    /**
+     * BUG FIX : transition ABSENT absente. Un candidat absent est traité
+     * comme un échec métier (rejet), avec une trace dédiée dans les notes.
+     */
+    @Transactional
+    public InterviewDto marquerAbsent(String idInterview, String auteurKeycloakId, boolean isRH) {
+        Interview interview = getEntityOuException(idInterview);
+
+        if (!isRH
+                && interview.getRecruteurKeycloakId() != null
+                && !interview.getRecruteurKeycloakId().equals(auteurKeycloakId)) {
+            throw new AccesNonAutoriseException(
+                    "Seul l'intervenant assigné à cet entretien peut le marquer absent");
+        }
+
+        if (!STATUTS_ACTIFS.contains(interview.getStatut())) {
+            throw new TransitionStatutInvalideException("Seul un entretien planifié ou reporté peut être marqué absent");
+        }
+
+        interview.setStatut(InterviewStatus.ABSENT);
+        interview.setDateModification(LocalDateTime.now());
+        interview.setActiveSlotKey(null);
+
+        Interview saved = interviewRepository.save(interview);
+
+        if (saved.getApplicationId() != null) {
+            applyService.changerStatutSysteme(saved.getApplicationId(), ApplicationStatus.REJETE,
+                    "Candidat absent à l'entretien " + libelle(saved.getType()), auteurKeycloakId);
+        }
+
+        return toDto(saved);
+    }
+
+    /**
+     * BUG FIX : transition REPORTE absente. Reste actif (garde son
+     * activeSlotKey), seule la date change.
+     */
+    @Transactional
+    public InterviewDto reporterEntretien(
+            String idInterview, LocalDateTime nouvelleDate, String auteurKeycloakId, boolean isRH) {
+
+        Interview interview = getEntityOuException(idInterview);
+
+        if (!isRH
+                && interview.getRecruteurKeycloakId() != null
+                && !interview.getRecruteurKeycloakId().equals(auteurKeycloakId)) {
+            throw new AccesNonAutoriseException(
+                    "Seul l'intervenant assigné à cet entretien peut le reporter");
+        }
+
+        if (!STATUTS_ACTIFS.contains(interview.getStatut())) {
+            throw new TransitionStatutInvalideException("Seul un entretien planifié ou reporté peut être reporté");
+        }
+        if (nouvelleDate == null || !nouvelleDate.isAfter(LocalDateTime.now())) {
+            throw new TransitionStatutInvalideException("La nouvelle date de l'entretien doit être dans le futur");
+        }
+
+        interview.setStatut(InterviewStatus.REPORTE);
+        interview.setDateEntretien(nouvelleDate);
+        interview.setDateFinEntretien(nouvelleDate.plusHours(1));
+        interview.setDateModification(LocalDateTime.now());
+
+        return toDto(interviewRepository.save(interview));
+    }
+
+    /**
+     * BUG FIX (mélange d'entretiens entre cycles / créneau fantôme après
+     * retrait) : appelé automatiquement quand ApplyService publie
+     * ApplicationInterviewsShouldCloseEvent (retrait de candidature ou
+     * redépôt après retrait). Ferme tout entretien encore actif rattaché à
+     * cette candidature et libère son activeSlotKey, pour qu'un nouveau
+     * cycle puisse planifier sereinement de nouveaux entretiens.
+     */
+    @EventListener
+    @Transactional
+    public void onApplicationInterviewsShouldClose(ApplicationInterviewsShouldCloseEvent event) {
+        List<Interview> actifs = interviewRepository
+                .findByApplicationIdOrderByDateCreationDesc(event.getApplicationId())
+                .stream()
+                .filter(i -> STATUTS_ACTIFS.contains(i.getStatut()))
+                .toList();
+
+        for (Interview interview : actifs) {
+            interview.setStatut(InterviewStatus.ANNULE);
+            interview.setActiveSlotKey(null);
+            interview.setDateModification(LocalDateTime.now());
+            String note = event.getMotif() != null ? event.getMotif() : "Clôturé automatiquement";
+            interview.setNotes(note);
+            interviewRepository.save(interview);
+            log.info("Entretien {} clôturé automatiquement pour la candidature {} ({})",
+                    interview.getIdInterview(), event.getApplicationId(), note);
+        }
     }
 
     public List<InterviewDto> getEntretiensPourCandidature(String idApplication, String requesterKeycloakId, boolean isRhOuEmployee) {
@@ -428,6 +691,129 @@ public class InterviewService {
         };
     }
 
+    private static String calculerActiveSlotKey(String applicationId, InterviewType type, int cycle) {
+        return applicationId + "|" + type + "|" + cycle;
+    }
+
+    /**
+     * BUG FIX : on stockait auparavant l'UUID Keycloak brut comme
+     * interviewerName. On tente ici de résoudre un nom affichable via
+     * UserServiceClient.
+     * <p>
+     * ADAPTER : le nom exact de la méthode dépend de votre client existant
+     * (ex: userServiceClient.getEmployeByKeycloakId(id)). Remplacez l'appel
+     * ci-dessous par la méthode réelle exposée par votre UserServiceClient.
+     * En attendant / en cas d'échec, on retombe sur le nom fourni
+     * explicitement par l'appelant (fallbackName), puis sur l'UUID en tout
+     * dernier recours, avec un log pour ne pas masquer le problème.
+     */
+    private String resolveDisplayName(String keycloakId, String fallbackName) {
+        if (!estVide(fallbackName) && !estUuid(fallbackName)) {
+            return fallbackName.trim();
+        }
+
+        String id = !estVide(keycloakId)
+                ? keycloakId
+                : (estUuid(fallbackName) ? fallbackName.trim() : null);
+
+        if (!estVide(id)) {
+            String cached = displayNameCache.get(id);
+            if (!estVide(cached)) {
+                return cached;
+            }
+
+            String fromDirectory = fetchDisplayNameFromDirectory(id);
+            if (!estVide(fromDirectory)) {
+                displayNameCache.put(id, fromDirectory);
+                return fromDirectory;
+            }
+
+            String fromJwt = fetchDisplayNameFromJwt(id);
+            if (!estVide(fromJwt)) {
+                displayNameCache.put(id, fromJwt);
+                return fromJwt;
+            }
+        }
+
+        if (!estVide(fallbackName) && !estUuid(fallbackName)) {
+            return fallbackName.trim();
+        }
+        // ne plus renvoyer l'UUID à l'UI
+        return !estVide(fallbackName) && !estUuid(fallbackName) ? fallbackName : "—";
+    }
+
+    private String fetchDisplayNameFromDirectory(String keycloakId) {
+        if (directoryNameMisses.contains(keycloakId)) {
+            return null;
+        }
+        try {
+            CandidatDto user = userServiceClient.getCandidatByKeycloakId(keycloakId);
+            if (user != null) {
+                String composed = composerNom(user.getPrenom(), user.getNom());
+                if (!estVide(composed)) {
+                    return composed;
+                }
+                if (!estVide(user.getEmail())) {
+                    return user.getEmail().trim();
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Annuaire users injoignable pour {} : {}", keycloakId, e.getMessage());
+        }
+        directoryNameMisses.add(keycloakId);
+        return null;
+    }
+
+    private String fetchDisplayNameFromJwt(String keycloakId) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null) {
+                return null;
+            }
+            Object principal = authentication.getPrincipal();
+            if (!(principal instanceof Jwt jwt)) {
+                return null;
+            }
+            if (!keycloakId.equals(jwt.getSubject())) {
+                return null;
+            }
+            String composed = composerNom(
+                    jwt.getClaimAsString("given_name"),
+                    jwt.getClaimAsString("family_name"));
+            if (estVide(composed)) {
+                composed = composerNom(
+                        jwt.getClaimAsString("prenom"),
+                        jwt.getClaimAsString("nom"));
+            }
+            if (!estVide(composed)) {
+                return composed;
+            }
+            if (!estVide(jwt.getClaimAsString("name"))) {
+                return jwt.getClaimAsString("name").trim();
+            }
+            if (!estVide(jwt.getClaimAsString("preferred_username"))) {
+                return jwt.getClaimAsString("preferred_username").trim();
+            }
+            if (!estVide(jwt.getClaimAsString("email"))) {
+                return jwt.getClaimAsString("email").trim();
+            }
+        } catch (Exception e) {
+            log.debug("Lecture du nom depuis le JWT impossible : {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private boolean estUuid(String value) {
+        return value != null
+                && value.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+    }
+
+    private String composerNom(String prenom, String nom) {
+        String p = prenom == null ? "" : prenom.trim();
+        String n = nom == null ? "" : nom.trim();
+        String full = (p + " " + n).trim();
+        return full.isEmpty() ? null : full;
+    }
     // ==================== Mapping ====================
 
     private Interview getEntityOuException(String id) {
@@ -467,29 +853,39 @@ public class InterviewService {
                 .build();
     }
 
+    /**
+     * BUG FIX : un LocalDate.parse / LocalTime.parse malformé venant du
+     * front remontait auparavant en DateTimeParseException non gérée
+     * (500 générique). On la traduit désormais en erreur métier claire.
+     */
     private Interview fromDto(InterviewDto dto) {
-        LocalDate date = dto.getInterviewDate() != null ? LocalDate.parse(dto.getInterviewDate()) : null;
-        LocalTime start = dto.getStartTime() != null ? LocalTime.parse(dto.getStartTime(), TIME_FMT) : null;
-        LocalTime end = dto.getEndTime() != null ? LocalTime.parse(dto.getEndTime(), TIME_FMT) : null;
+        try {
+            LocalDate date = dto.getInterviewDate() != null ? LocalDate.parse(dto.getInterviewDate()) : null;
+            LocalTime start = dto.getStartTime() != null ? LocalTime.parse(dto.getStartTime(), TIME_FMT) : null;
+            LocalTime end = dto.getEndTime() != null ? LocalTime.parse(dto.getEndTime(), TIME_FMT) : null;
 
-        return Interview.builder()
-                .idInterview(dto.getId())
-                .candidatKeycloakId(dto.getCandidatKeycloakId())
-                .candidateName(dto.getCandidateName())
-                .candidateEmail(dto.getCandidateEmail())
-                .posteRecrutement(dto.getPosteRecrutement())
-                .posteId(dto.getPosteId())
-                .recruteurKeycloakId(dto.getRecruteurKeycloakId())
-                .interviewerName(dto.getInterviewerName())
-                .dateEntretien(date != null && start != null ? LocalDateTime.of(date, start) : null)
-                .dateFinEntretien(date != null && end != null ? LocalDateTime.of(date, end) : null)
-                .mode(dto.getMode())
-                .lieu(dto.getLocation())
-                .lienVisio(dto.getMeetingLink())
-                .statut(dto.getStatus())
-                .resultat(dto.getResultat())
-                .notes(dto.getNotes())
-                .build();
+            return Interview.builder()
+                    .idInterview(dto.getId())
+                    .candidatKeycloakId(dto.getCandidatKeycloakId())
+                    .candidateName(dto.getCandidateName())
+                    .candidateEmail(dto.getCandidateEmail())
+                    .posteRecrutement(dto.getPosteRecrutement())
+                    .posteId(dto.getPosteId())
+                    .recruteurKeycloakId(dto.getRecruteurKeycloakId())
+                    .interviewerName(dto.getInterviewerName())
+                    .dateEntretien(date != null && start != null ? LocalDateTime.of(date, start) : null)
+                    .dateFinEntretien(date != null && end != null ? LocalDateTime.of(date, end) : null)
+                    .mode(dto.getMode())
+                    .lieu(dto.getLocation())
+                    .lienVisio(dto.getMeetingLink())
+                    .statut(dto.getStatus())
+                    .resultat(dto.getResultat())
+                    .notes(dto.getNotes())
+                    .build();
+        } catch (DateTimeParseException e) {
+            throw new TransitionStatutInvalideException(
+                    "Date ou heure d'entretien invalide : " + e.getMessage());
+        }
     }
 
     private boolean estVide(String valeur) {
@@ -510,6 +906,7 @@ public class InterviewService {
                 .findByRecruteurKeycloakIdAndTypeAndSource(
                         employeeKeycloakId, InterviewType.TECHNIQUE, InterviewSource.CANDIDATURE)
                 .stream()
+                .filter(i -> STATUTS_ACTIFS.contains(i.getStatut()))
                 .sorted(Comparator.comparing(Interview::getDateEntretien,
                         Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(this::toCandidatTechniqueDto) // overload (Interview e) déjà présent
