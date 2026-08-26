@@ -2,6 +2,10 @@ package service.recrutement.Service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -51,11 +55,35 @@ public class ApplyService {
         TRANSITIONS_AUTORISEES.put(ApplicationStatus.REJETE, EnumSet.noneOf(ApplicationStatus.class));
         TRANSITIONS_AUTORISEES.put(ApplicationStatus.RETIRE, EnumSet.noneOf(ApplicationStatus.class));
     }
+
     private static final Set<ApplicationStatus> STATUTS_RESERVES_AU_WORKFLOW_ENTRETIEN = EnumSet.of(
             ApplicationStatus.EN_ENTRETIEN_RH,
             ApplicationStatus.EN_ENTRETIEN_TECHNIQUE,
             ApplicationStatus.EN_ENTRETIEN_FINAL
     );
+
+    public PageResponseDto<ApplicationDto> getCandidaturesParCandidatPaged(
+            String candidatKeycloakId, int page, int size,
+            String sortBy, String sortDir, ApplicationStatus statut) {
+
+        Sort sort = "desc".equalsIgnoreCase(sortDir)
+                ? Sort.by(sortBy).descending()
+                : Sort.by(sortBy).ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        Page<Application> result = (statut != null)
+                ? applicationRepository.findByCandidatKeycloakIdAndStatut(candidatKeycloakId, statut, pageable)
+                : applicationRepository.findByCandidatKeycloakId(candidatKeycloakId, pageable);
+
+        return PageResponseDto.<ApplicationDto>builder()
+                .content(result.map(this::toDto).getContent())
+                .page(result.getNumber())
+                .size(result.getSize())
+                .totalElements(result.getTotalElements())
+                .totalPages(result.getTotalPages())
+                .last(result.isLast())
+                .build();
+    }
 
     public List<ApplicationDto> getCandidaturesClasseesPourPoste(String posteId) {
         PosteRecrutement poste = posteRecrutementService.getById(posteId);
@@ -394,44 +422,46 @@ public class ApplyService {
     public long countCandidaturesPourPoste(String posteId) {
         return applicationRepository.countByPosteRecrutementId(posteId);
     }
-/**
- * BUG évité : REJETE n'a normalement aucune transition sortante autorisée
- * (voir TRANSITIONS_AUTORISEES). Cette méthode contourne volontairement
- * cette règle, mais UNIQUEMENT pour réactiver une candidature rejetée suite
- * à une absence à l'entretien, après acceptation RH d'une demande de
- * réactivation (voir ReprogrammerService). Ne jamais l'exposer directement
- * en API publique.
- */
-@Transactional
-public ApplicationDto reactiverApresAbsence(
-        String idApplication, ApplicationStatus statutCible, String commentaire, String auteurKeycloakId) {
 
-    Application application = getApplicationOuException(idApplication);
+    /**
+     * BUG évité : REJETE n'a normalement aucune transition sortante autorisée
+     * (voir TRANSITIONS_AUTORISEES). Cette méthode contourne volontairement
+     * cette règle, mais UNIQUEMENT pour réactiver une candidature rejetée suite
+     * à une absence à l'entretien, après acceptation RH d'une demande de
+     * réactivation (voir ReprogrammerService). Ne jamais l'exposer directement
+     * en API publique.
+     */
+    @Transactional
+    public ApplicationDto reactiverApresAbsence(
+            String idApplication, ApplicationStatus statutCible, String commentaire, String auteurKeycloakId) {
 
-    if (application.getStatut() != ApplicationStatus.REJETE) {
-        throw new TransitionStatutInvalideException(
-                "Seule une candidature rejetée suite à une absence peut être réactivée");
+        Application application = getApplicationOuException(idApplication);
+
+        if (application.getStatut() != ApplicationStatus.REJETE) {
+            throw new TransitionStatutInvalideException(
+                    "Seule une candidature rejetée suite à une absence peut être réactivée");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        application.setStatut(statutCible);
+        application.setDateDernierChangementStatut(now);
+        application.setCommentaireRH(commentaire != null && !commentaire.isBlank() ? commentaire.trim() : null);
+
+        if (application.getHistoriqueStatuts() == null) {
+            application.setHistoriqueStatuts(new ArrayList<>());
+        }
+        application.getHistoriqueStatuts().add(StatusChange.builder()
+                .statut(statutCible)
+                .date(now)
+                .commentaire(commentaire)
+                .auteurKeycloakId(auteurKeycloakId)
+                .build());
+
+        Application saved = applicationRepository.save(application);
+        notifyCandidatChangementStatut(saved);
+        return toDto(saved);
     }
 
-    LocalDateTime now = LocalDateTime.now();
-    application.setStatut(statutCible);
-    application.setDateDernierChangementStatut(now);
-    application.setCommentaireRH(commentaire != null && !commentaire.isBlank() ? commentaire.trim() : null);
-
-    if (application.getHistoriqueStatuts() == null) {
-        application.setHistoriqueStatuts(new ArrayList<>());
-    }
-    application.getHistoriqueStatuts().add(StatusChange.builder()
-            .statut(statutCible)
-            .date(now)
-            .commentaire(commentaire)
-            .auteurKeycloakId(auteurKeycloakId)
-            .build());
-
-    Application saved = applicationRepository.save(application);
-    notifyCandidatChangementStatut(saved);
-    return toDto(saved);
-}
     @Transactional
     public ApplicationDto changerStatutParRH(
             String idApplication,

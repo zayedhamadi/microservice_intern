@@ -53,57 +53,103 @@ public class InterviewService {
     private final PosteRecrutementService posteRecrutementService;
     private final RecrutementMail recrutementMail;
     private final UserServiceClient userServiceClient;
+    private final GoogleMeetService googleMeetService;
+
 
     private static final Set<InterviewStatus> STATUTS_ACTIFS =
             EnumSet.of(InterviewStatus.PLANIFIE, InterviewStatus.REPORTE);
 
     // ==================== ENTRETIENS LIBRES (créés depuis le calendrier) ====================
 
-    @Transactional
-    public InterviewDto createLibre(InterviewDto dto, String auteurKeycloakId) {
-        validerDtoLibre(dto);
+@Transactional
+public InterviewDto createLibre(InterviewDto dto, String auteurKeycloakId) {
+    validerDtoLibre(dto);
 
-        LocalDateTime now = LocalDateTime.now();
-        Interview interview = fromDto(dto);
-        interview.setIdInterview(null);
-        interview.setSource(InterviewSource.LIBRE);
-        interview.setApplicationId(null);
-        interview.setType(null);
-        interview.setRecruteurKeycloakId(auteurKeycloakId); // jamais depuis le dto client
-        interview.setInterviewerName(resolveDisplayName(auteurKeycloakId, dto.getInterviewerName()));
-        interview.setDateCreation(now);
-        interview.setDateModification(now);
-        // Un entretien LIBRE n'est pas concerné par le mécanisme anti-doublon
-        // applicationId/type (il n'a ni l'un ni l'autre) : pas d'activeSlotKey.
+    LocalDateTime now = LocalDateTime.now();
+    Interview interview = fromDto(dto);
+    interview.setIdInterview(null);
+    interview.setSource(InterviewSource.LIBRE);
+    interview.setApplicationId(null);
+    interview.setType(null);
+    interview.setRecruteurKeycloakId(auteurKeycloakId);
+    interview.setInterviewerName(resolveDisplayName(auteurKeycloakId, dto.getInterviewerName()));
 
-        return toDto(interviewRepository.save(interview));
+    // ==================== GÉNÉRATION AUTOMATIQUE DU LIEN MEET ====================
+    if (dto.getMode() == InterviewMode.DISTANCIEL) {
+        String genere = googleMeetService.genererLienMeet(
+                "Entretien - " + dto.getCandidateName(),
+                dto.getCandidateEmail(),
+                null,
+                interview.getDateEntretien()
+        );
+        interview.setLienVisio(normaliser(genere != null ? genere : dto.getMeetingLink()));
     }
+    // ========================================================================
 
-    @Transactional
-    public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeycloakId) {
-        Interview existant = getEntityOuException(id);
-        validerDtoLibre(dto);
+    interview.setDateCreation(now);
+    interview.setDateModification(now);
 
-        Interview maj = fromDto(dto);
-        maj.setIdInterview(existant.getIdInterview());
-        maj.setVersion(existant.getVersion());
-        maj.setSource(existant.getSource());
-        maj.setApplicationId(existant.getApplicationId());
-        maj.setType(existant.getType());
-        maj.setCandidatKeycloakId(existant.getCandidatKeycloakId());
-        // si l'entretien n'a pas encore de recruteur (ex: ancien entretien candidature),
-        // on l'attribue à celui qui modifie ; sinon on conserve le propriétaire d'origine
-        maj.setRecruteurKeycloakId(
-                existant.getRecruteurKeycloakId() != null ? existant.getRecruteurKeycloakId() : auteurKeycloakId);
-        maj.setInterviewerName(
-                existant.getInterviewerName() != null && existant.getRecruteurKeycloakId() != null
-                        ? maj.getInterviewerName() // le dto peut légitimement renommer l'intervenant en LIBRE
-                        : resolveDisplayName(auteurKeycloakId, maj.getInterviewerName()));
-        maj.setDateCreation(existant.getDateCreation());
-        maj.setDateModification(LocalDateTime.now());
+    Interview saved = interviewRepository.save(interview);
 
-        return toDto(interviewRepository.save(maj));
+    // ==================== ENVOI DE LA CONVOCATION ====================
+    try {
+        recrutementMail.sendEntretienConvocationLibre(saved);
+    } catch (Exception e) {
+        log.error("Erreur lors de l'envoi de la convocation pour l'entretien libre {}", saved.getIdInterview(), e);
     }
+    // ===================================================================
+
+    return toDto(saved);
+}
+@Transactional
+public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeycloakId) {
+    Interview existant = getEntityOuException(id);
+    validerDtoLibre(dto);
+
+    Interview maj = fromDto(dto);
+    maj.setIdInterview(existant.getIdInterview());
+    maj.setVersion(existant.getVersion());
+    maj.setSource(existant.getSource());
+    maj.setApplicationId(existant.getApplicationId());
+    maj.setType(existant.getType());
+    maj.setCandidatKeycloakId(existant.getCandidatKeycloakId());
+    maj.setRecruteurKeycloakId(
+            existant.getRecruteurKeycloakId() != null ? existant.getRecruteurKeycloakId() : auteurKeycloakId);
+    maj.setInterviewerName(
+            existant.getInterviewerName() != null && existant.getRecruteurKeycloakId() != null
+                    ? maj.getInterviewerName()
+                    : resolveDisplayName(auteurKeycloakId, maj.getInterviewerName()));
+
+    // ==================== GÉNÉRATION AUTOMATIQUE DU LIEN MEET ====================
+    if (maj.getMode() == InterviewMode.DISTANCIEL
+            && (existant.getLienVisio() == null || existant.getMode() != InterviewMode.DISTANCIEL)) {
+        String genere = googleMeetService.genererLienMeet(
+                "Entretien - " + maj.getCandidateName(),
+                maj.getCandidateEmail(),
+                null,
+                maj.getDateEntretien()
+        );
+        maj.setLienVisio(normaliser(genere != null ? genere : dto.getMeetingLink()));
+    } else if (maj.getMode() == InterviewMode.DISTANCIEL) {
+        maj.setLienVisio(existant.getLienVisio()); // garde le lien existant, ne régénère pas
+    }
+    // ========================================================================
+
+    maj.setDateCreation(existant.getDateCreation());
+    maj.setDateModification(LocalDateTime.now());
+
+    Interview saved = interviewRepository.save(maj);
+
+    // ==================== ENVOI DE LA CONVOCATION (MISE À JOUR) ====================
+    try {
+        recrutementMail.sendEntretienConvocationLibre(saved);
+    } catch (Exception e) {
+        log.error("Erreur lors de l'envoi de la convocation (mise à jour) pour l'entretien libre {}", saved.getIdInterview(), e);
+    }
+    // =================================================================================
+
+    return toDto(saved);
+}
 
     /**
      * BUG FIX : l'ancienne implémentation supprimait n'importe quel entretien,
@@ -303,6 +349,22 @@ public class InterviewService {
 
         PosteRecrutement poste = posteRecrutementService.getById(application.getPosteRecrutementId());
 
+        // ==================== GÉNÉRATION AUTOMATIQUE DU LIEN GOOGLE MEET ====================
+        // Applicable aussi bien quand c'est un RH (rh-initial, rh-final) qu'un EMPLOYEE
+        // (technique) qui planifie, puisque les deux passent par cette même méthode.
+        String lienVisioFinal = dto.getLienVisio();
+        if (dto.getMode() == InterviewMode.DISTANCIEL) {
+            String genere = googleMeetService.genererLienMeet(
+                    "Entretien " + libelle(type) + " - " + application.getNomComplet(),
+                    application.getEmail(),
+                    null, // email du recruteur, à brancher via UserServiceClient si disponible
+                    dto.getDateEntretien()
+            );
+            // Fallback : si Google Meet indisponible/non configuré, on garde le lien manuel s'il y en a un
+            lienVisioFinal = (genere != null) ? genere : dto.getLienVisio();
+        }
+        // ========================================================================
+
         LocalDateTime maintenant = LocalDateTime.now();
 
         Interview interview = Interview.builder()
@@ -321,7 +383,7 @@ public class InterviewService {
                 .dateEntretien(dto.getDateEntretien())
                 .dateFinEntretien(dto.getDateEntretien().plusHours(1))
                 .lieu(normaliser(dto.getLieu()))
-                .lienVisio(normaliser(dto.getLienVisio()))
+                .lienVisio(normaliser(lienVisioFinal)) // ← utilise le lien généré (ou fallback manuel)
                 .statut(InterviewStatus.PLANIFIE)
                 .dateCreation(maintenant)
                 .dateModification(maintenant)
@@ -368,9 +430,10 @@ public class InterviewService {
         if (dto.getMode() == InterviewMode.PRESENTIEL && estVide(dto.getLieu())) {
             throw new TransitionStatutInvalideException("Le lieu est obligatoire pour un entretien présentiel");
         }
-        if (dto.getMode() == InterviewMode.DISTANCIEL && estVide(dto.getLienVisio())) {
-            throw new TransitionStatutInvalideException("Le lien de visioconférence est obligatoire");
-        }
+        // BUG FIX : le lien de visioconférence n'est plus exigé du client en DISTANCIEL,
+        // il est désormais généré automatiquement côté serveur via GoogleMeetService
+        // (avec fallback sur dto.getLienVisio() si la génération échoue). On ne bloque
+        // donc plus la planification si le champ est vide.
     }
 
     /**

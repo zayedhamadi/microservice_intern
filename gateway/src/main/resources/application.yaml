@@ -1,9 +1,5 @@
 server:
   port: ${GATEWAY_PORT:8080}
-
-
-
-
 spring:
   servlet:
     multipart:
@@ -96,6 +92,10 @@ spring:
               uri: lb://RECRUTEMENT-SERVICE
               predicates:
                 - Path=/rh/api/entretiens/**
+            - id: user-service-rh-
+              uri: lb://USER-SERVICE
+              predicates:
+                - Path=/rh/**
 
 
     loadbalancer:

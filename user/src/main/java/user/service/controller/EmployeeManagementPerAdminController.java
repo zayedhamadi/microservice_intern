@@ -34,10 +34,12 @@ public class EmployeeManagementPerAdminController {
     UserStatistics userStatistics;
     ActivityService activityService;
 
-    @PostMapping("/admin/register")
+@PostMapping("/admin/register")
+
     public ResponseEntity<?> register(@Valid @RequestBody createUserPerAdminDto request) {
         try {
-            User user = this.employeeManagement.register(request);
+            User user = employeeManagement.register(request);
+            employeeManagement.postRegister(user, request);
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                     "message", "Compte créé avec succès",
                     "id", user.getId(),

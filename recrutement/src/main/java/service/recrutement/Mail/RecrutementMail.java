@@ -151,24 +151,68 @@ public class RecrutementMail {
                 .replace("{{consulterUrl}}", escape(frontendUrl + "/rh/candidatures/" + application.getIdApplication()));
         sendEmail(recruteurEmail, "Nouvelle candidature : " + poste.getTitre(), html);
     }
+// ============ ENTRETIEN LIBRE (créé depuis le calendrier) ============
+public void sendEntretienConvocationLibre(Interview interview) {
+    if (interview.getCandidateEmail() == null || interview.getCandidateEmail().isBlank()) return;
 
-    // ============ ENTRETIEN ============
-    public void sendEntretienConvocation(PosteRecrutement poste, Application application, Interview interview) {
-        if (application.getEmail() == null || application.getEmail().isBlank()) return;
-        String dateEntretien = interview.getDateEntretien() != null ? interview.getDateEntretien().format(DATE_FORMATTER) : "À confirmer prochainement";
-        String html = loadTemplate("templates/NotifyUserThatHehasEntretien.html")
-                .replace("{{prenom}}", escape(firstName(application.getNomComplet())))
-                .replace("{{titrePoste}}", escape(poste.getTitre()))
-                .replace("{{typeEntretien}}", escape(libelleType(interview.getType())))
-                .replace("{{modeEntretien}}", escape(libelleMode(interview.getMode())))
-                .replace("{{dateEntretien}}", escape(dateEntretien))
-                .replace("{{lieuEntretien}}", escape(lieuAffiche(interview)))
-                .replace("{{commentaireDisplay}}", "none")
-                .replace("{{commentaireRH}}", "")
-                .replace("{{consulterUrl}}", escape(frontendUrl + "/candidat/mes-candidatures"));
-        sendEmail(application.getEmail(), "Convocation entretien " + libelleType(interview.getType()) + " : " + poste.getTitre(), html);
-    }
+    String dateEntretien = interview.getDateEntretien() != null
+            ? interview.getDateEntretien().format(DATE_FORMATTER)
+            : "À confirmer prochainement";
 
+    boolean aLienMeet = interview.getMode() == InterviewMode.DISTANCIEL
+            && interview.getLienVisio() != null
+            && !interview.getLienVisio().isBlank();
+    String lienMeetDisplay = aLienMeet ? "block" : "none";
+    String lienMeet = aLienMeet ? interview.getLienVisio() : "";
+
+    String titrePoste = interview.getPosteRecrutement() != null ? interview.getPosteRecrutement() : "Entretien";
+
+    String html = loadTemplate("templates/NotifyUserThatHehasEntretien.html")
+            .replace("{{prenom}}", escape(firstName(interview.getCandidateName())))
+            .replace("{{titrePoste}}", escape(titrePoste))
+            .replace("{{typeEntretien}}", escape(libelleType(interview.getType())))
+            .replace("{{modeEntretien}}", escape(libelleMode(interview.getMode())))
+            .replace("{{dateEntretien}}", escape(dateEntretien))
+            .replace("{{lieuEntretien}}", escape(lieuAffiche(interview)))
+            .replace("{{lienMeetDisplay}}", lienMeetDisplay)
+            .replace("{{lienMeet}}", escape(lienMeet))
+            .replace("{{commentaireDisplay}}", "none")
+            .replace("{{commentaireRH}}", "")
+            .replace("{{consulterUrl}}", escape(frontendUrl + "/candidat/mes-candidatures"));
+
+    sendEmail(interview.getCandidateEmail(),
+            "Convocation entretien : " + titrePoste,
+            html);
+}
+   // ============ ENTRETIEN ============
+public void sendEntretienConvocation(PosteRecrutement poste, Application application, Interview interview) {
+    if (application.getEmail() == null || application.getEmail().isBlank()) return;
+    String dateEntretien = interview.getDateEntretien() != null ? interview.getDateEntretien().format(DATE_FORMATTER) : "À confirmer prochainement";
+
+    // ==================== LIEN GOOGLE MEET ====================
+    // Affiché uniquement si l'entretien est en DISTANCIEL et qu'un lien
+    // valide a été généré (par GoogleMeetService ou fourni manuellement).
+    boolean aLienMeet = interview.getMode() == InterviewMode.DISTANCIEL
+            && interview.getLienVisio() != null
+            && !interview.getLienVisio().isBlank();
+    String lienMeetDisplay = aLienMeet ? "block" : "none";
+    String lienMeet = aLienMeet ? interview.getLienVisio() : "";
+    // ============================================================
+
+    String html = loadTemplate("templates/NotifyUserThatHehasEntretien.html")
+            .replace("{{prenom}}", escape(firstName(application.getNomComplet())))
+            .replace("{{titrePoste}}", escape(poste.getTitre()))
+            .replace("{{typeEntretien}}", escape(libelleType(interview.getType())))
+            .replace("{{modeEntretien}}", escape(libelleMode(interview.getMode())))
+            .replace("{{dateEntretien}}", escape(dateEntretien))
+            .replace("{{lieuEntretien}}", escape(lieuAffiche(interview)))
+            .replace("{{lienMeetDisplay}}", lienMeetDisplay)
+            .replace("{{lienMeet}}", escape(lienMeet))
+            .replace("{{commentaireDisplay}}", "none")
+            .replace("{{commentaireRH}}", "")
+            .replace("{{consulterUrl}}", escape(frontendUrl + "/candidat/mes-candidatures"));
+    sendEmail(application.getEmail(), "Convocation entretien " + libelleType(interview.getType()) + " : " + poste.getTitre(), html);
+}
     // ============ CHANGEMENT STATUT ============
     public void sendApplicationStatusChanged(PosteRecrutement poste, Application application) {
         if (application.getEmail() == null || application.getEmail().isBlank()) return;

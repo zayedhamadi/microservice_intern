@@ -11,6 +11,7 @@ import user.service.Entity.Activity;
 import user.service.Entity.Enum.ActivityType;
 import user.service.Repository.ActivityRepository;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,16 +25,28 @@ public class ActivityService {
     ActivityRepository activityRepository;
 
     @Transactional
-    public Activity log(ActivityType type, String prenom, String nom, String role, String motif, String message) {
-        Activity activity = Activity.builder()
-                .type(type)
-                .actorPrenom(prenom)
-                .actorNom(nom)
-                .role(role)
-                .motif(motif)
-                .message(message)
-                .build();
-        return activityRepository.save(activity);
+    public Activity log(ActivityType type, String actorPrenom, String actorNom, String role, String motif, String message) {
+    if (message == null) {
+        message = "Aucun message fourni";
+    }
+    if (message == null) {
+        message = switch (type) {
+            case NEW_USER -> "Nouvel utilisateur créé : " + actorPrenom + " " + actorNom;
+            default -> "Action effectuée";
+        };
+    }
+
+    Activity activity = Activity.builder()
+            .type(type)
+            .actorPrenom(actorPrenom)
+            .actorNom(actorNom)
+            .role(role)
+            .motif(motif)
+            .message(message)
+            .createdAt(LocalDateTime.now())
+            .build();
+
+    return activityRepository.save(activity);
     }
 
     @Transactional

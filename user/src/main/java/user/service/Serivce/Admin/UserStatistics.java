@@ -146,39 +146,33 @@ public class UserStatistics {
 
 
 
+public Map<String, Object> findUserDetailByIdAdmin(Long id) {
+    List<Object[]> rows = userRepository.findUserDetailById(id);
+    if (rows.isEmpty()) throw new RuntimeException("User not found: " + id);
 
-    public Map<String, Object> findUserDetailByIdAdmin(Long id) {
-        List<Object[]> rows = userRepository.findUserDetailById(id);
-        if (rows.isEmpty()) throw new RuntimeException("User not found: " + id);
+Object[] row = rows.get(0);
+    log.info("Row content: {}", Arrays.toString(row));
+    Map<String, Object> u = new LinkedHashMap<>();
+    u.put("id", safeGet(row, 0));
+    u.put("nom", safeGet(row, 1));
+    u.put("prenom", safeGet(row, 2));
+    u.put("email", safeGet(row, 3));
+    u.put("etatCompte", safeGet(row, 4));
+    u.put("role", safeGet(row, 5));
+    u.put("dateInscrit", safeGet(row, 6) != null ? safeGet(row, 6).toString() : null);
+    u.put("image", toBase64Image(safeGet(row, 7)));
+    u.put("genre", safeGet(row, 8));
+    u.put("adresse", safeGet(row, 9));
+    u.put("description", safeGet(row, 10));
+    u.put("numTel", safeGet(row, 11));
+    u.put("dateNaissance", safeGet(row, 12) != null ? safeGet(row, 12).toString() : null);
+    u.put("matricule", safeGet(row, 13));
 
-        Object[] row = rows.get(0);
-        Map<String, Object> u = new LinkedHashMap<>();
-        u.put("id",               safeGet(row, 0));
-        u.put("nom",              safeGet(row, 1));
-        u.put("prenom",           safeGet(row, 2));
-        u.put("email",            safeGet(row, 3));
-        u.put("etatCompte",       safeGet(row, 4));
-        u.put("role",             safeGet(row, 5));
-        u.put("dateInscrit",      safeGet(row, 6) != null ? safeGet(row, 6).toString() : null);
-        u.put("image",            toBase64Image(safeGet(row, 7)));
-        u.put("genre",            safeGet(row, 8));
-        u.put("adresse",          safeGet(row, 9));
-        u.put("description",      safeGet(row, 10));
-        u.put("numTel",           safeGet(row, 11));
-        u.put("dateNaissance",    safeGet(row, 12) != null ? safeGet(row, 12).toString() : null);
-        u.put("matricule",        safeGet(row, 13));
-        u.put("linkedin",         safeGet(row, 14));
-        u.put("twitter",          safeGet(row, 15));
-        u.put("siteweb",          safeGet(row, 16));
-        u.put("specialiteEtude",  safeGet(row, 17));
-        u.put("universiteEtude",  safeGet(row, 18));
-        u.put("niveauEtude",      safeGet(row, 19));
-        u.put("anneesExperience", safeGet(row, 20));
-        u.put("motifCessation",   safeGet(row, 21));
-        u.put("dateCessation",    safeGet(row, 22) != null ? safeGet(row, 22).toString() : null);
-        u.put("motifReactivation",safeGet(row, 23));
-        return u;
-    }
+    u.put("motifCessation", safeGet(row, 14));
+    u.put("dateCessation", safeGet(row, 15) != null ? safeGet(row, 15).toString() : null);
+    u.put("motifReactivation", safeGet(row, 16));
+    return u;
+}
 
     public Map<String, Object> getUserById(Long id) {
         List<Object[]> rows = userRepository.findUserDetailById(id);

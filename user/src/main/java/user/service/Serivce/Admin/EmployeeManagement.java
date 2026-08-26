@@ -1,4 +1,3 @@
-// Serivce/Admin/EmployeeManagement.java — mis à jour avec log d'activité
 package user.service.Serivce.Admin;
 
 import lombok.AccessLevel;
@@ -27,70 +26,94 @@ import java.util.UUID;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class EmployeeManagement {
 
-     UserRepository userRepository;
-     UserEmailService userEmailService;
-     KeycloakService keycloakService;
-     AdminRealtimeService realtimeService;
-     ActivityService activityService;
+    UserRepository userRepository;
+    UserEmailService userEmailService;
+    KeycloakService keycloakService;
+    AdminRealtimeService realtimeService;
+    ActivityService activityService;
 
-     @Transactional
-     public User register(createUserPerAdminDto dto) {
-          if (dto.getRole() == Role.CANDIDAT) {
-               throw new RuntimeException("Le rôle candidat ne peut pas être choisi à l'inscription.");
-          }
-          if (userRepository.existsByEmail(dto.getEmail())) {
-               throw new RuntimeException("Email déjà utilisé : " + dto.getEmail());
-          }
 
-          String password = generatePw();
-          dto.setPassword(password);
-          String matricule = generateMatricule();
-          dto.setMatricule(matricule);
+    @Transactional
+    public User register(createUserPerAdminDto dto) {
+        log.info("1. Début register() pour email : {}", dto.getEmail());
+        if (dto.getRole() == Role.CANDIDAT) {
+            throw new RuntimeException("Rôle candidat interdit.");
+        }
+        log.info("2. Rôle validé : {}", dto.getRole());
 
-          String keycloakId = keycloakService.createUserInKeycloak(dto);
-          log.info("Keycloak ID obtenu : {}", keycloakId);
+        if (userRepository.existsByEmail(dto.getEmail())) {
+            throw new RuntimeException("Email existe : " + dto.getEmail());
+        }
+        log.info("3. Email unique validé.");
 
-          User user = User.builder()
-                  .keycloakId(keycloakId)
-                  .email(dto.getEmail())
-                  .nom(dto.getNom())
-                  .prenom(dto.getPrenom())
-                  .role(dto.getRole())
-                  .matricule(matricule)
-                  .etatCompte(Compte.ACTIF)
-                  .build();
+        String password = generatePw();
+        dto.setPassword(password);
+        String matricule = generateMatricule();
+        dto.setMatricule(matricule);
+        log.info("4. Mot de passe et matricule générés.");
 
-          User saved = userRepository.save(user);
-          log.info("User sauvegardé en DB, ID : {}", saved.getId());
+        String keycloakId = keycloakService.createUserInKeycloak(dto);
+        log.info("5. Keycloak ID : {}", keycloakId);
 
-          try {
-               realtimeService.notifyNewUser(saved.getPrenom(), saved.getNom(), saved.getRole().name());
-          } catch (Exception e) {
-               log.warn("WS notify newUser échoué : {}", e.getMessage());
-          }
+        User user = User.builder()
+                .keycloakId(keycloakId)
+                .email(dto.getEmail())
+                .nom(dto.getNom())
+                .prenom(dto.getPrenom())
+                .role(dto.getRole())
+                .matricule(matricule)
+                .etatCompte(Compte.ACTIF)
+                .build();
 
-          try {
-               activityService.log(ActivityType.NEW_USER, saved.getPrenom(), saved.getNom(),
-                       saved.getRole().name(), null, null);
-          } catch (Exception e) {
-               log.warn("Log activité newUser échoué : {}", e.getMessage());
-          }
+        User saved = userRepository.save(user);
+        log.info("6. User sauvegardé en DB avec ID : {}", saved.getId());
 
-          userEmailService.sendAccountCreationEmail(
-                  dto.getEmail(), dto.getPrenom(), dto.getNom(), matricule, password, "http://localhost:4200/login"
-          );
+        return saved; // <-- Fin de la transaction ici
+    }
 
-          return saved;
-     }
+    // Méthode séparée (hors transaction)
+    public void postRegister(User user, createUserPerAdminDto dto) {
+        try {
+            realtimeService.notifyNewUser(user.getPrenom(), user.getNom(), user.getRole().name());
+            log.info("7. Notification WebSocket envoyée.");
+        } catch (Exception e) {
+            log.warn("7. Échec WebSocket : {}", e.getMessage());
+        }
 
-     public String generatePw() {
-          String uuid = UUID.randomUUID().toString().replace("-", "");
-          return uuid.substring(0, 10);
-     }
+        try {
+            // Message non null
+            activityService.log(
+                    ActivityType.NEW_USER,
+                    user.getPrenom(),
+                    user.getNom(),
+                    user.getRole().name(),
+                    null,
+                    "Nouvel utilisateur créé : " + user.getPrenom() + " " + user.getNom()
+            );
+            log.info("8. Log activité ajouté.");
+        } catch (Exception e) {
+            log.warn("8. Échec log activité : {}", e.getMessage());
+        }
 
-     public String generateMatricule() {
-          Random random = new Random();
-          int randomNum = 100 + random.nextInt(900);
-          return "EMP-" + java.time.Year.now() + "-" + randomNum;
-     }
+        try {
+            userEmailService.sendAccountCreationEmail(
+                    dto.getEmail(), dto.getPrenom(), dto.getNom(), user.getMatricule(), dto.getPassword(),
+                    "http://localhost:4200/login"
+            );
+            log.info("9. Email envoyé.");
+        } catch (Exception e) {
+            log.error("9. Échec envoi email : {}", e.getMessage());
+        }
+    }
+
+    public String generatePw() {
+        String uuid = UUID.randomUUID().toString().replace("-", "");
+        return uuid.substring(0, 10);
+    }
+
+    public String generateMatricule() {
+        Random random = new Random();
+        int randomNum = 100 + random.nextInt(900);
+        return "EMP-" + java.time.Year.now() + "-" + randomNum;
+    }
 }

@@ -28,7 +28,27 @@ public class UserServiceClient {
     private final Map<String, String> displayNameCache = new ConcurrentHashMap<>();
     private final Set<String> directoryNameMisses = ConcurrentHashMap.newKeySet();
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
+public String getKeycloakIdByUserId(Long userId) {
+    try {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(INTERNAL_API_KEY_HEADER, internalApiKey);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
 
+        ResponseEntity<String> response = restTemplate.exchange(
+                userServiceUrl + "/internal/users/{userId}/keycloak-id",
+                HttpMethod.GET,
+                entity,
+                String.class,
+                userId
+        );
+        return response.getBody();
+    } catch (HttpClientErrorException.NotFound e) {
+        throw new RuntimeException("User introuvable : " + userId);
+    } catch (Exception e) {
+        log.error("Erreur lors de la récupération du keycloakId pour userId={}", userId, e);
+        throw new RuntimeException("Impossible de récupérer le keycloakId", e);
+    }
+}
     public UserServiceClient(RestTemplate restTemplate,
                              @Value("${user-service.url}") String userServiceUrl,
                              @Value("${internal.api.key}") String internalApiKey) {

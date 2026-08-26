@@ -4,10 +4,15 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import service.recrutement.Client.UserNotificationClient;
 import service.recrutement.Entity.Certification;
 import service.recrutement.Entity.dto.CertificationDto;
+import service.recrutement.Entity.dto.PageResponseDto;
 import service.recrutement.Repository.CertificationRepository;
 import service.recrutement.Service.UserCVFile.FileService;
 
@@ -25,6 +30,34 @@ public class CertificationService {
     CertificationRepository repository;
     FileService fileService;
     UserNotificationClient userNotificationClient;
+public PageResponseDto<CertificationDto> getByUserIdPaged(
+        String keycloakId, int page, int size,
+        String sortBy, String sortDir, String titre) {
+
+    Sort sort = "desc".equalsIgnoreCase(sortDir)
+            ? Sort.by(sortBy).descending()
+            : Sort.by(sortBy).ascending();
+    Pageable pageable = PageRequest.of(page, size, sort);
+
+    Page<Certification> result = (titre != null && !titre.isBlank())
+            ? repository.findByKeycloakIdAndTitreContainingIgnoreCase(keycloakId, titre, pageable)
+            : repository.findByKeycloakId(keycloakId, pageable);
+
+    return PageResponseDto.<CertificationDto>builder()
+            .content(result.map(this::toDto).getContent())
+            .page(result.getNumber())
+            .size(result.getSize())
+            .totalElements(result.getTotalElements())
+            .totalPages(result.getTotalPages())
+            .last(result.isLast())
+            .build();
+}
+    public List<CertificationDto> getByUserId(String keycloakId) {
+        return repository.findByKeycloakId(keycloakId)
+                .stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
+    }
 
     public List<CertificationDto> getMyCertifications(String keycloakId) {
         return repository.findByKeycloakId(keycloakId).stream().map(this::toDto).collect(Collectors.toList());
