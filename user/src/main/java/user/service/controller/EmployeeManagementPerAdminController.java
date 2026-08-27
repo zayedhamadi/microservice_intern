@@ -1,7 +1,5 @@
 package user.service.controller;
 
-
-
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-        import user.service.Dto.createUserPerAdminDto;
+import user.service.Dto.createUserPerAdminDto;
 import user.service.Entity.User;
 import user.service.Serivce.Admin.EmployeeManagement;
 import user.service.Serivce.Admin.UserStatistics;
@@ -34,8 +32,7 @@ public class EmployeeManagementPerAdminController {
     UserStatistics userStatistics;
     ActivityService activityService;
 
-@PostMapping("/admin/register")
-
+    @PostMapping("/admin/register")
     public ResponseEntity<?> register(@Valid @RequestBody createUserPerAdminDto request) {
         try {
             User user = employeeManagement.register(request);
@@ -52,20 +49,44 @@ public class EmployeeManagementPerAdminController {
         }
     }
 
+    // ==================== ENDPOINTS POUR LES ACTIVITÉS ====================
 
+    /**
+     * Récupère les activités récentes (avec nettoyage optionnel des anciennes activités).
+     *
+     * @param limit      Nombre maximal d'activités à retourner.
+     * @param daysToKeep Nombre de jours à conserver (optionnel, par défaut 30).
+     * @return Liste des activités récentes.
+     */
     @GetMapping("/activities")
     public ResponseEntity<List<Map<String, Object>>> getActivities(
-            @RequestParam(defaultValue = "20") int limit) {
-        return ResponseEntity.ok(activityService.getRecent(limit));
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "30") int daysToKeep) {
+        return ResponseEntity.ok(activityService.getRecentAndCleanOld(limit, daysToKeep));
     }
 
+    /**
+     * Supprime toutes les activités.
+     */
     @DeleteMapping("/activities")
     public ResponseEntity<Void> clearActivities() {
         activityService.clear();
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * Supprime les activités anciennes (plus vieilles que `days` jours).
+     *
+     * @param days Nombre de jours à conserver.
+     * @return Réponse vide.
+     */
+    @DeleteMapping("/activities/old")
+    public ResponseEntity<Void> cleanOldActivities(@RequestParam(defaultValue = "30") int days) {
+        activityService.deleteOldActivities(days);
+        return ResponseEntity.noContent().build();
+    }
 
+    // ==================== AUTRES ENDPOINTS (INCHANGÉS) ====================
 
     @GetMapping("/stats/monthly-registrations")
     public ResponseEntity<Map<String, List<Integer>>> getMonthlyRegistrations() {
@@ -101,8 +122,6 @@ public class EmployeeManagementPerAdminController {
         }
     }
 
-
-
     @GetMapping("/usersAdmin/{id}")
     public ResponseEntity<Map<String, Object>> getUserByIddAdmin(@PathVariable Long id) {
         try {
@@ -112,7 +131,6 @@ public class EmployeeManagementPerAdminController {
             return ResponseEntity.notFound().build();
         }
     }
-
 
     @GetMapping("/users/search")
     public ResponseEntity<List<Map<String, Object>>> searchUsers(@RequestParam String q) {

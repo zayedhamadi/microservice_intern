@@ -11,6 +11,7 @@ import service.recrutement.Entity.dto.DepartementDto;
 import service.recrutement.Entity.dto.PosteRecrutementDto;
 import service.recrutement.Mail.RecrutementMail;
 import service.recrutement.Repository.PosteRecrutementRepository;
+import service.recrutement.WebSocket.RecrutementRealtimeService;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,6 +25,7 @@ public class PosteRecrutementService {
     private final PosteRecrutementRepository posteRecrutementRepository;
     private final UserServiceClient userServiceClient;
     private final RecrutementMail recrutementMail;
+    private final RecrutementRealtimeService recrutementRealtimeService;
 
 
     public List<PosteRecrutement> getAllPostes() {
@@ -103,6 +105,7 @@ public class PosteRecrutementService {
                     savedPoste.getTitre(), savedPoste.getDepartementNom());
 
             notifyCandidatesOfNewPoste(savedPoste);
+            recrutementRealtimeService.notifyNewPoste(savedPoste);
 
             return savedPoste;
         } catch (Exception e) {
@@ -141,7 +144,7 @@ public class PosteRecrutementService {
         }
     }
 
-    public PosteRecrutement updatePosteRecrutement(String id,PosteRecrutementDto posteDto) {
+    public PosteRecrutement updatePosteRecrutement(String id, PosteRecrutementDto posteDto) {
         try {
             Optional<PosteRecrutement> optionalPosteRecrutement = Optional.ofNullable(this.getById(id));
 
@@ -151,6 +154,7 @@ public class PosteRecrutementService {
             }
 
             PosteRecrutement pr = optionalPosteRecrutement.get();
+            StatusPosteRecrutement ancienStatus = pr.getStatus();
 
             pr.setTitre(posteDto.getTitre());
             pr.setDescription(posteDto.getDescription());
@@ -173,7 +177,11 @@ public class PosteRecrutementService {
 
             log.info("Mise à jour du poste : {}", pr.getTitre());
 
-            return posteRecrutementRepository.save(pr);
+            PosteRecrutement saved = posteRecrutementRepository.save(pr);
+            if (ancienStatus != saved.getStatus()) {
+                recrutementRealtimeService.notifyPosteStatusChanged(saved, ancienStatus);
+            }
+            return saved;
 
         } catch (Exception e) {
             log.error("Erreur lors de la mise à jour du poste : {}", e.getMessage());

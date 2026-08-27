@@ -14,6 +14,7 @@ import service.recrutement.Exception.DemandeReportNotFoundException;
 import service.recrutement.Exception.TransitionStatutInvalideException;
 import service.recrutement.Repository.InterviewRepository;
 import service.recrutement.Repository.ReprogrammerRepository;
+import service.recrutement.WebSocket.RecrutementRealtimeService;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
@@ -24,21 +25,16 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class ReprogrammerService {
+    public class ReprogrammerService {
 
     private final ReprogrammerRepository reprogrammerRepository;
     private final InterviewRepository interviewRepository;
     private final ApplyService applyService;
+    private final RecrutementRealtimeService recrutementRealtimeService;
 
     private static final Set<InterviewStatus> STATUTS_ACTIFS =
             EnumSet.of(InterviewStatus.PLANIFIE, InterviewStatus.REPORTE);
 
-    // ==================== CRÉATION DES DEMANDES ====================
-
-    /**
-     * Le candidat demande à reporter un entretien actif qui le concerne.
-     * Cible = intervenant assigné, sinon n'importe quel RH.
-     */
     @Transactional
     public ReprogrammerDto demanderParCandidat(String interviewId, DemanderReportDto dto, String candidatKeycloakId) {
         Interview interview = getInterviewOuException(interviewId);
@@ -55,11 +51,6 @@ public class ReprogrammerService {
                 candidatKeycloakId, interview.getRecruteurKeycloakId());
     }
 
-    /**
-     * L'intervenant (RH pour RH_INITIAL/RH_FINAL, EMPLOYEE assigné pour
-     * TECHNIQUE) propose un report au candidat, avec motif (charge, imprévu...).
-     * Cible = candidat.
-     */
     @Transactional
     public ReprogrammerDto proposerParIntervenant(
             String interviewId, DemanderReportDto dto, String auteurKeycloakId, boolean isRH) {
@@ -76,10 +67,6 @@ public class ReprogrammerService {
                 auteurKeycloakId, interview.getCandidatKeycloakId());
     }
 
-    /**
-     * Candidat marqué absent : demande de réactivation avec motif justificatif.
-     * Cible = toujours un RH (décision humaine obligatoire, jamais automatique).
-     */
     @Transactional
     public ReprogrammerDto demanderReactivationApresAbsence(
             String interviewId, DemanderReportDto dto, String candidatKeycloakId) {
@@ -108,7 +95,6 @@ public class ReprogrammerService {
         if (dto.getNouvelleDateProposee() == null || !dto.getNouvelleDateProposee().isAfter(LocalDateTime.now())) {
             throw new TransitionStatutInvalideException("La nouvelle date proposée doit être dans le futur");
         }
-        // Évite la confusion : une seule demande EN_ATTENTE à la fois par entretien
         if (reprogrammerRepository.existsByInterviewIdAndStatut(interview.getIdInterview(), DemandeReportStatus.EN_ATTENTE)) {
             throw new TransitionStatutInvalideException(
                     "Une demande de report est déjà en attente pour cet entretien");
@@ -127,10 +113,10 @@ public class ReprogrammerService {
                 .dateCreation(LocalDateTime.now())
                 .build();
 
-        return toDto(reprogrammerRepository.save(demande), interview);
+        Reprogrammer saved = reprogrammerRepository.save(demande);
+        recrutementRealtimeService.notifyReprogrammationDemandee(saved);
+        return toDto(saved, interview);
     }
-
-    // ==================== TRAITEMENT DES DEMANDES ====================
 
     @Transactional
     public ReprogrammerDto accepterDemande(String demandeId, String auteurKeycloakId, boolean isRH) {
@@ -150,7 +136,9 @@ public class ReprogrammerService {
         demande.setTraiteParKeycloakId(auteurKeycloakId);
         demande.setDateTraitement(LocalDateTime.now());
 
-        return toDto(reprogrammerRepository.save(demande), interview);
+        Reprogrammer saved = reprogrammerRepository.save(demande);
+        recrutementRealtimeService.notifyReprogrammationTraitee(saved);
+        return toDto(saved, interview);
     }
 
     @Transactional
@@ -173,7 +161,9 @@ public class ReprogrammerService {
         demande.setTraiteParKeycloakId(auteurKeycloakId);
         demande.setDateTraitement(LocalDateTime.now());
 
-        return toDto(reprogrammerRepository.save(demande), interview);
+        Reprogrammer saved = reprogrammerRepository.save(demande);
+        recrutementRealtimeService.notifyReprogrammationTraitee(saved);
+        return toDto(saved, interview);
     }
 
     private void appliquerReport(Reprogrammer demande, Interview interview) {
@@ -185,15 +175,10 @@ public class ReprogrammerService {
         interview.setDateEntretien(demande.getNouvelleDateProposee());
         interview.setDateFinEntretien(demande.getNouvelleDateProposee().plusHours(1));
         interview.setDateModification(LocalDateTime.now());
-        interviewRepository.save(interview);
+        Interview saved = interviewRepository.save(interview);
+        recrutementRealtimeService.notifyInterviewReporte(saved);
     }
 
-    /**
-     * BUG évité : Application.statut = REJETE après une absence, et REJETE
-     * n'a normalement aucune transition sortante. On passe par
-     * ApplyService#reactiverApresAbsence, chemin dédié et encadré, déclenché
-     * uniquement ici, après acceptation RH.
-     */
     private void appliquerReactivation(Reprogrammer demande, Interview interview, String auteurKeycloakId) {
         if (interview.getStatut() != InterviewStatus.ABSENT) {
             throw new TransitionStatutInvalideException(
@@ -206,12 +191,10 @@ public class ReprogrammerService {
         interview.setStatut(InterviewStatus.PLANIFIE);
         interview.setDateEntretien(demande.getNouvelleDateProposee());
         interview.setDateFinEntretien(demande.getNouvelleDateProposee().plusHours(1));
-        // BUG évité : si un nouvel entretien du même type a déjà été replanifié
-        // entre-temps sur ce cycle, l'index unique sparse activeSlotKey empêchera
-        // la sauvegarde (DuplicateKeyException) plutôt que de créer un doublon silencieux.
         interview.setActiveSlotKey(slotKey);
         interview.setDateModification(LocalDateTime.now());
-        interviewRepository.save(interview);
+        Interview saved = interviewRepository.save(interview);
+        recrutementRealtimeService.notifyInterviewPlanifie(saved);
 
         if (interview.getApplicationId() != null && interview.getType() != null) {
             ApplicationStatus statutCible = statutEnCoursPour(interview.getType());
@@ -229,8 +212,6 @@ public class ReprogrammerService {
             case RH_FINAL -> ApplicationStatus.EN_ENTRETIEN_FINAL;
         };
     }
-
-    // ==================== AUTORISATIONS ====================
 
     private void verifierDroitSurEntretien(Interview interview, String auteurKeycloakId, boolean isRH) {
         boolean estRhOuFinal = interview.getType() == InterviewType.RH_INITIAL
@@ -251,7 +232,6 @@ public class ReprogrammerService {
     }
 
     private void verifierDroitDeTraitement(Reprogrammer demande, String auteurKeycloakId, boolean isRH) {
-        // Un RH peut toujours arbitrer une demande, peu importe son type.
         if (isRH) return;
 
         if (demande.getCibleKeycloakId() != null) {
@@ -260,7 +240,6 @@ public class ReprogrammerService {
             }
             return;
         }
-        // cibleKeycloakId nul = réactivation après absence, réservée au RH.
         throw new AccesNonAutoriseException("Seul un RH peut traiter cette demande");
     }
 
@@ -269,8 +248,6 @@ public class ReprogrammerService {
             throw new TransitionStatutInvalideException("Cette demande a déjà été traitée");
         }
     }
-
-    // ==================== LECTURE ====================
 
     public List<ReprogrammerDto> getDemandesPourEntretien(String interviewId, String requesterKeycloakId, boolean isRhOuEmployee) {
         Interview interview = getInterviewOuException(interviewId);
@@ -300,8 +277,6 @@ public class ReprogrammerService {
                 .map(d -> toDto(d, interviewRepository.findById(d.getInterviewId()).orElse(null)))
                 .collect(Collectors.toList());
     }
-
-    // ==================== MAPPING / HELPERS ====================
 
     private Interview getInterviewOuException(String interviewId) {
         return interviewRepository.findById(interviewId)

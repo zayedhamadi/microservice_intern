@@ -100,8 +100,10 @@ spring:
               uri: lb://RECRUTEMENT-SERVICE
               predicates:
                 - Path=/api/recrutement/stats/**
-
-
+            - id: ws-recrutement
+              uri: lb:ws://recrutement-service
+              predicates:
+                - Path=/ws-recrutement/**
             - id: recrutement-service-dashboard-candidat
               uri: lb://RECRUTEMENT-SERVICE
               predicates:

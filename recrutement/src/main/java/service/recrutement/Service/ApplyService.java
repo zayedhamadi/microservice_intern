@@ -20,6 +20,7 @@ import service.recrutement.Exception.*;
 import service.recrutement.Mail.RecrutementMail;
 import service.recrutement.Repository.ApplicationRepository;
 import service.recrutement.Service.UserCVFile.FileUserService;
+import service.recrutement.WebSocket.RecrutementRealtimeService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -36,6 +37,7 @@ public class ApplyService {
     private final RecrutementMail recrutementMail;
     private final RankingClient rankingClient;
     private final PosteRecrutementService posteRecrutementService;
+    private final RecrutementRealtimeService recrutementRealtimeService;
     private static final long MAX_CV_SIZE = 10L * 1024 * 1024;
     private static final long MAX_LETTRE_SIZE = 10L * 1024 * 1024;
     private static final Map<ApplicationStatus, Set<ApplicationStatus>> TRANSITIONS_AUTORISEES = new EnumMap<>(ApplicationStatus.class);
@@ -142,7 +144,7 @@ public class ApplyService {
 
     private MlCandidatDto fetchCandidatMlDto(Application a, PosteRecrutement poste) {
         CandidatDto c = fetchCandidatInfo(a.getCandidatKeycloakId());
-        log.info("DEBUG candidat={} → userServiceOk={} snapshotCompetences={}",
+        log.info("DEBUG candidat={} userServiceOk={} snapshotCompetences={}",
                 a.getCandidatKeycloakId(), c != null, a.getCompetences());
         if (c == null) {
             return MlCandidatDto.builder()
@@ -328,6 +330,7 @@ public class ApplyService {
             Application saved = applicationRepository.save(application);
             log.info("Candidature enregistrée : candidat={}, poste={}", saved.getCandidatKeycloakId(), poste.getTitre());
             notifyRecruteurNouvelleCandidature(poste, saved);
+            recrutementRealtimeService.notifyNewApplication(saved, poste);
             return toDto(saved);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw new CandidatureExistanteException();
@@ -423,14 +426,6 @@ public class ApplyService {
         return applicationRepository.countByPosteRecrutementId(posteId);
     }
 
-    /**
-     * BUG évité : REJETE n'a normalement aucune transition sortante autorisée
-     * (voir TRANSITIONS_AUTORISEES). Cette méthode contourne volontairement
-     * cette règle, mais UNIQUEMENT pour réactiver une candidature rejetée suite
-     * à une absence à l'entretien, après acceptation RH d'une demande de
-     * réactivation (voir ReprogrammerService). Ne jamais l'exposer directement
-     * en API publique.
-     */
     @Transactional
     public ApplicationDto reactiverApresAbsence(
             String idApplication, ApplicationStatus statutCible, String commentaire, String auteurKeycloakId) {
@@ -442,6 +437,7 @@ public class ApplyService {
                     "Seule une candidature rejetée suite à une absence peut être réactivée");
         }
 
+        ApplicationStatus ancienStatut = application.getStatut();
         LocalDateTime now = LocalDateTime.now();
         application.setStatut(statutCible);
         application.setDateDernierChangementStatut(now);
@@ -458,6 +454,7 @@ public class ApplyService {
                 .build());
 
         Application saved = applicationRepository.save(application);
+        recrutementRealtimeService.notifyApplicationStatusChanged(saved, ancienStatut, statutCible);
         notifyCandidatChangementStatut(saved);
         return toDto(saved);
     }
@@ -534,7 +531,7 @@ public class ApplyService {
             throw new TransitionStatutInvalideException(
                     "Transition impossible : "
                             + ancienStatut
-                            + " → "
+                            + " -> "
                             + nouveauStatut
             );
         }
@@ -571,7 +568,8 @@ public class ApplyService {
                         .build()
         );
 
-        applicationRepository.save(application);
+        Application saved = applicationRepository.save(application);
+        recrutementRealtimeService.notifyApplicationStatusChanged(saved, ancienStatut, nouveauStatut);
     }
 
     private void notifyCandidatChangementStatut(Application application) {

@@ -22,6 +22,7 @@ import service.recrutement.Exception.TransitionStatutInvalideException;
 import service.recrutement.Mail.RecrutementMail;
 import service.recrutement.Repository.ApplicationRepository;
 import service.recrutement.Repository.InterviewRepository;
+import service.recrutement.WebSocket.RecrutementRealtimeService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -54,113 +55,96 @@ public class InterviewService {
     private final RecrutementMail recrutementMail;
     private final UserServiceClient userServiceClient;
     private final GoogleMeetService googleMeetService;
-
+    private final RecrutementRealtimeService recrutementRealtimeService;
 
     private static final Set<InterviewStatus> STATUTS_ACTIFS =
             EnumSet.of(InterviewStatus.PLANIFIE, InterviewStatus.REPORTE);
 
-    // ==================== ENTRETIENS LIBRES (créés depuis le calendrier) ====================
+    @Transactional
+    public InterviewDto createLibre(InterviewDto dto, String auteurKeycloakId) {
+        validerDtoLibre(dto);
 
-@Transactional
-public InterviewDto createLibre(InterviewDto dto, String auteurKeycloakId) {
-    validerDtoLibre(dto);
+        LocalDateTime now = LocalDateTime.now();
+        Interview interview = fromDto(dto);
+        interview.setIdInterview(null);
+        interview.setSource(InterviewSource.LIBRE);
+        interview.setApplicationId(null);
+        interview.setType(null);
+        interview.setRecruteurKeycloakId(auteurKeycloakId);
+        interview.setInterviewerName(resolveDisplayName(auteurKeycloakId, dto.getInterviewerName()));
 
-    LocalDateTime now = LocalDateTime.now();
-    Interview interview = fromDto(dto);
-    interview.setIdInterview(null);
-    interview.setSource(InterviewSource.LIBRE);
-    interview.setApplicationId(null);
-    interview.setType(null);
-    interview.setRecruteurKeycloakId(auteurKeycloakId);
-    interview.setInterviewerName(resolveDisplayName(auteurKeycloakId, dto.getInterviewerName()));
+        if (dto.getMode() == InterviewMode.DISTANCIEL) {
+            String genere = googleMeetService.genererLienMeet(
+                    "Entretien - " + dto.getCandidateName(),
+                    dto.getCandidateEmail(),
+                    null,
+                    interview.getDateEntretien()
+            );
+            interview.setLienVisio(normaliser(genere != null ? genere : dto.getMeetingLink()));
+        }
 
-    // ==================== GÉNÉRATION AUTOMATIQUE DU LIEN MEET ====================
-    if (dto.getMode() == InterviewMode.DISTANCIEL) {
-        String genere = googleMeetService.genererLienMeet(
-                "Entretien - " + dto.getCandidateName(),
-                dto.getCandidateEmail(),
-                null,
-                interview.getDateEntretien()
-        );
-        interview.setLienVisio(normaliser(genere != null ? genere : dto.getMeetingLink()));
+        interview.setDateCreation(now);
+        interview.setDateModification(now);
+
+        Interview saved = interviewRepository.save(interview);
+        recrutementRealtimeService.notifyInterviewPlanifie(saved);
+
+        try {
+            recrutementMail.sendEntretienConvocationLibre(saved);
+        } catch (Exception e) {
+            log.error("Erreur lors de l'envoi de la convocation pour l'entretien libre {}", saved.getIdInterview(), e);
+        }
+
+        return toDto(saved);
     }
-    // ========================================================================
 
-    interview.setDateCreation(now);
-    interview.setDateModification(now);
+    @Transactional
+    public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeycloakId) {
+        Interview existant = getEntityOuException(id);
+        validerDtoLibre(dto);
 
-    Interview saved = interviewRepository.save(interview);
+        Interview maj = fromDto(dto);
+        maj.setIdInterview(existant.getIdInterview());
+        maj.setVersion(existant.getVersion());
+        maj.setSource(existant.getSource());
+        maj.setApplicationId(existant.getApplicationId());
+        maj.setType(existant.getType());
+        maj.setCandidatKeycloakId(existant.getCandidatKeycloakId());
+        maj.setRecruteurKeycloakId(
+                existant.getRecruteurKeycloakId() != null ? existant.getRecruteurKeycloakId() : auteurKeycloakId);
+        maj.setInterviewerName(
+                existant.getInterviewerName() != null && existant.getRecruteurKeycloakId() != null
+                        ? maj.getInterviewerName()
+                        : resolveDisplayName(auteurKeycloakId, maj.getInterviewerName()));
 
-    // ==================== ENVOI DE LA CONVOCATION ====================
-    try {
-        recrutementMail.sendEntretienConvocationLibre(saved);
-    } catch (Exception e) {
-        log.error("Erreur lors de l'envoi de la convocation pour l'entretien libre {}", saved.getIdInterview(), e);
+        if (maj.getMode() == InterviewMode.DISTANCIEL
+                && (existant.getLienVisio() == null || existant.getMode() != InterviewMode.DISTANCIEL)) {
+            String genere = googleMeetService.genererLienMeet(
+                    "Entretien - " + maj.getCandidateName(),
+                    maj.getCandidateEmail(),
+                    null,
+                    maj.getDateEntretien()
+            );
+            maj.setLienVisio(normaliser(genere != null ? genere : dto.getMeetingLink()));
+        } else if (maj.getMode() == InterviewMode.DISTANCIEL) {
+            maj.setLienVisio(existant.getLienVisio());
+        }
+
+        maj.setDateCreation(existant.getDateCreation());
+        maj.setDateModification(LocalDateTime.now());
+
+        Interview saved = interviewRepository.save(maj);
+        recrutementRealtimeService.notifyInterviewPlanifie(saved);
+
+        try {
+            recrutementMail.sendEntretienConvocationLibre(saved);
+        } catch (Exception e) {
+            log.error("Erreur lors de l'envoi de la convocation (mise à jour) pour l'entretien libre {}", saved.getIdInterview(), e);
+        }
+
+        return toDto(saved);
     }
-    // ===================================================================
 
-    return toDto(saved);
-}
-@Transactional
-public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeycloakId) {
-    Interview existant = getEntityOuException(id);
-    validerDtoLibre(dto);
-
-    Interview maj = fromDto(dto);
-    maj.setIdInterview(existant.getIdInterview());
-    maj.setVersion(existant.getVersion());
-    maj.setSource(existant.getSource());
-    maj.setApplicationId(existant.getApplicationId());
-    maj.setType(existant.getType());
-    maj.setCandidatKeycloakId(existant.getCandidatKeycloakId());
-    maj.setRecruteurKeycloakId(
-            existant.getRecruteurKeycloakId() != null ? existant.getRecruteurKeycloakId() : auteurKeycloakId);
-    maj.setInterviewerName(
-            existant.getInterviewerName() != null && existant.getRecruteurKeycloakId() != null
-                    ? maj.getInterviewerName()
-                    : resolveDisplayName(auteurKeycloakId, maj.getInterviewerName()));
-
-    // ==================== GÉNÉRATION AUTOMATIQUE DU LIEN MEET ====================
-    if (maj.getMode() == InterviewMode.DISTANCIEL
-            && (existant.getLienVisio() == null || existant.getMode() != InterviewMode.DISTANCIEL)) {
-        String genere = googleMeetService.genererLienMeet(
-                "Entretien - " + maj.getCandidateName(),
-                maj.getCandidateEmail(),
-                null,
-                maj.getDateEntretien()
-        );
-        maj.setLienVisio(normaliser(genere != null ? genere : dto.getMeetingLink()));
-    } else if (maj.getMode() == InterviewMode.DISTANCIEL) {
-        maj.setLienVisio(existant.getLienVisio()); // garde le lien existant, ne régénère pas
-    }
-    // ========================================================================
-
-    maj.setDateCreation(existant.getDateCreation());
-    maj.setDateModification(LocalDateTime.now());
-
-    Interview saved = interviewRepository.save(maj);
-
-    // ==================== ENVOI DE LA CONVOCATION (MISE À JOUR) ====================
-    try {
-        recrutementMail.sendEntretienConvocationLibre(saved);
-    } catch (Exception e) {
-        log.error("Erreur lors de l'envoi de la convocation (mise à jour) pour l'entretien libre {}", saved.getIdInterview(), e);
-    }
-    // =================================================================================
-
-    return toDto(saved);
-}
-
-    /**
-     * BUG FIX : l'ancienne implémentation supprimait n'importe quel entretien,
-     * y compris ceux issus du workflow de candidature (source = CANDIDATURE),
-     * ce qui laissait l'Application bloquée dans un statut EN_ENTRETIEN_*
-     * sans qu'aucun entretien n'existe plus, et détruisait toute trace pour
-     * l'audit. Seuls les entretiens LIBRE peuvent désormais être supprimés ;
-     * un entretien de candidature doit être annulé via {@link #annulerEntretien}
-     * pour conserver la traçabilité et faire revenir la candidature à un
-     * statut cohérent.
-     */
     @Transactional
     public void delete(String id) {
         Interview interview = getEntityOuException(id);
@@ -185,19 +169,12 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         if (dto.getStatus() == null) throw new TransitionStatutInvalideException("Le statut est requis");
     }
 
-    // ==================== LECTURE ====================
-
     public List<PosteEntretiensTechniquesDto> getEntretiensTechniquesParPoste() {
-        // 1) Source of truth: candidatures actuellement en entretien technique
         List<Application> candidatures = applicationRepository
                 .findByStatut(ApplicationStatus.EN_ENTRETIEN_TECHNIQUE);
 
         if (candidatures.isEmpty()) return List.of();
 
-        // 2) Interviews techniques déjà planifiées, indexées par applicationId.
-        //    BUG FIX : on ne garde que celles actives (PLANIFIE/REPORTE), sinon un
-        //    entretien TERMINE/ANNULE d'un cycle précédent pouvait s'afficher à la
-        //    place de l'entretien réellement en cours.
         Map<String, Interview> interviewParApplication = interviewRepository
                 .findByTypeAndSource(InterviewType.TECHNIQUE, InterviewSource.CANDIDATURE)
                 .stream()
@@ -205,7 +182,7 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
                 .collect(Collectors.toMap(
                         Interview::getApplicationId,
                         i -> i,
-                        (a, b) -> a.getDateCreation().isAfter(b.getDateCreation()) ? a : b // garde la + récente
+                        (a, b) -> a.getDateCreation().isAfter(b.getDateCreation()) ? a : b
                 ));
 
         Map<String, PosteEntretiensTechniquesDto> parPoste = new LinkedHashMap<>();
@@ -220,7 +197,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
                     titre = p.getTitre();
                     departement = p.getDepartementNom();
                 } catch (Exception ignored) {
-                    // poste supprimé ou introuvable : on affiche quand même le candidat
                 }
                 return PosteEntretiensTechniquesDto.builder()
                         .posteId(posteId)
@@ -244,13 +220,12 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
 
     private CandidatEntretienTechniqueDto toCandidatTechniqueDto(Application app, Interview e) {
         if (e == null) {
-            // Pas encore planifié : on l'affiche quand même, avec un statut "à planifier"
             return CandidatEntretienTechniqueDto.builder()
                     .applicationId(app.getIdApplication())
                     .candidatKeycloakId(app.getCandidatKeycloakId())
                     .candidateName(app.getNomComplet())
                     .candidateEmail(app.getEmail())
-                    .status(InterviewStatus.PLANIFIE) // ou un statut dédié "A_PLANIFIER" si vous en ajoutez un
+                    .status(InterviewStatus.PLANIFIE)
                     .build();
         }
         return toCandidatTechniqueDto(e);
@@ -310,8 +285,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
                 .collect(Collectors.toList());
     }
 
-    // ==================== WORKFLOW CANDIDATURE ====================
-
     @Transactional
     public InterviewDto planifierEntretien(
             String idApplication, InterviewType type, PlanifierEntretienDto dto, String auteurKeycloakId) {
@@ -335,10 +308,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         int cycle = application.getCycleCandidature() != null ? application.getCycleCandidature() : 1;
         String slotKey = calculerActiveSlotKey(idApplication, type, cycle);
 
-        // Contrôle "fast fail" pour un message d'erreur clair côté UI. Il reste
-        // intrinsèquement racy pris isolément (check-then-act) : la garantie
-        // définitive contre les doublons est l'index unique sparse sur
-        // Interview.activeSlotKey, voir le catch(DuplicateKeyException) plus bas.
         boolean dejaPlanifie = interviewRepository.existsByApplicationIdAndTypeAndStatutIn(
                 idApplication, type, List.of(InterviewStatus.PLANIFIE, InterviewStatus.REPORTE));
 
@@ -349,21 +318,16 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
 
         PosteRecrutement poste = posteRecrutementService.getById(application.getPosteRecrutementId());
 
-        // ==================== GÉNÉRATION AUTOMATIQUE DU LIEN GOOGLE MEET ====================
-        // Applicable aussi bien quand c'est un RH (rh-initial, rh-final) qu'un EMPLOYEE
-        // (technique) qui planifie, puisque les deux passent par cette même méthode.
         String lienVisioFinal = dto.getLienVisio();
         if (dto.getMode() == InterviewMode.DISTANCIEL) {
             String genere = googleMeetService.genererLienMeet(
                     "Entretien " + libelle(type) + " - " + application.getNomComplet(),
                     application.getEmail(),
-                    null, // email du recruteur, à brancher via UserServiceClient si disponible
+                    null,
                     dto.getDateEntretien()
             );
-            // Fallback : si Google Meet indisponible/non configuré, on garde le lien manuel s'il y en a un
             lienVisioFinal = (genere != null) ? genere : dto.getLienVisio();
         }
-        // ========================================================================
 
         LocalDateTime maintenant = LocalDateTime.now();
 
@@ -376,14 +340,13 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
                 .posteRecrutement(poste.getTitre())
                 .posteId(poste.getIdPosteRecrutement())
                 .recruteurKeycloakId(auteurKeycloakId)
-                // BUG FIX : on stockait l'UUID Keycloak brut comme "nom" affiché.
                 .interviewerName(resolveDisplayName(auteurKeycloakId, null))
                 .type(type)
                 .mode(dto.getMode())
                 .dateEntretien(dto.getDateEntretien())
                 .dateFinEntretien(dto.getDateEntretien().plusHours(1))
                 .lieu(normaliser(dto.getLieu()))
-                .lienVisio(normaliser(lienVisioFinal)) // ← utilise le lien généré (ou fallback manuel)
+                .lienVisio(normaliser(lienVisioFinal))
                 .statut(InterviewStatus.PLANIFIE)
                 .dateCreation(maintenant)
                 .dateModification(maintenant)
@@ -395,13 +358,11 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         try {
             saved = interviewRepository.save(interview);
         } catch (DuplicateKeyException e) {
-            // BUG FIX (race condition) : garantie ultime, atomique côté base,
-            // qu'on ne peut pas créer deux entretiens actifs identiques même
-            // en cas d'appels concurrents ayant tous les deux passé le
-            // contrôle "exists" ci-dessus.
             throw new TransitionStatutInvalideException(
                     "Un entretien " + libelle(type) + " est déjà en cours de planification pour cette candidature");
         }
+
+        recrutementRealtimeService.notifyInterviewPlanifie(saved);
 
         ApplicationStatus nouveauStatut = statutEnCoursPour(type);
         if (application.getStatut() != nouveauStatut) {
@@ -430,22 +391,8 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         if (dto.getMode() == InterviewMode.PRESENTIEL && estVide(dto.getLieu())) {
             throw new TransitionStatutInvalideException("Le lieu est obligatoire pour un entretien présentiel");
         }
-        // BUG FIX : le lien de visioconférence n'est plus exigé du client en DISTANCIEL,
-        // il est désormais généré automatiquement côté serveur via GoogleMeetService
-        // (avec fallback sur dto.getLienVisio() si la génération échoue). On ne bloque
-        // donc plus la planification si le champ est vide.
     }
 
-    /**
-     * BUG FIX : contrôle d'autorisation absent auparavant — n'importe quel
-     * utilisateur authentifié pouvait clôturer le résultat de l'entretien de
-     * quelqu'un d'autre. Seul l'intervenant assigné (recruteurKeycloakId)
-     * peut enregistrer le résultat, sauf si isRH=true (rôle RH avec droit
-     * de passer outre, à adapter selon votre modèle de rôles).
-     * <p>
-     * NB : le contrôleur appelant cette méthode doit désormais transmettre
-     * isRH (ex: via les rôles Keycloak du principal courant).
-     */
     @Transactional
     public InterviewDto enregistrerResultat(
             String idInterview,
@@ -460,14 +407,9 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
 
         Interview interview = getEntityOuException(idInterview);
 
-        // =========================================================
-        // CONTRÔLE D'AUTORISATION
-        // =========================================================
-
         if (interview.getType() == InterviewType.RH_INITIAL
                 || interview.getType() == InterviewType.RH_FINAL) {
 
-            // RH_INITIAL et RH_FINAL → RH uniquement
             if (!isRH) {
                 throw new AccesNonAutoriseException(
                         "Seul un RH peut enregistrer le résultat de cet entretien");
@@ -475,7 +417,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
 
         } else if (interview.getType() == InterviewType.TECHNIQUE) {
 
-            // TECHNIQUE → Employee assigné uniquement
             if (interview.getRecruteurKeycloakId() == null
                     || !interview.getRecruteurKeycloakId().equals(auteurKeycloakId)) {
 
@@ -484,20 +425,12 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
             }
         }
 
-        // =========================================================
-        // VÉRIFICATION DU STATUT
-        // =========================================================
-
         if (interview.getStatut() != InterviewStatus.PLANIFIE
                 && interview.getStatut() != InterviewStatus.REPORTE) {
 
             throw new TransitionStatutInvalideException(
                     "Cet entretien ne peut plus recevoir de résultat");
         }
-
-        // =========================================================
-        // VÉRIFICATION DU RÉSULTAT
-        // =========================================================
 
         if (dto.getResultat() == InterviewResult.ECHOUE
                 && estVide(dto.getNotes())) {
@@ -506,23 +439,14 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
                     "Une note est obligatoire lorsqu'un entretien est échoué");
         }
 
-        // =========================================================
-        // TERMINER L'ENTRETIEN
-        // =========================================================
-
         interview.setStatut(InterviewStatus.TERMINE);
         interview.setResultat(dto.getResultat());
         interview.setNotes(normaliser(dto.getNotes()));
         interview.setDateModification(LocalDateTime.now());
-
-        // Libération du créneau anti-doublon
         interview.setActiveSlotKey(null);
 
         Interview saved = interviewRepository.save(interview);
-
-        // =========================================================
-        // MISE À JOUR DE LA CANDIDATURE
-        // =========================================================
+        recrutementRealtimeService.notifyInterviewResultat(saved);
 
         if (saved.getApplicationId() != null) {
 
@@ -559,13 +483,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         return toDto(saved);
     }
 
-    /**
-     * BUG FIX : transition ANNULE absente du service alors que le enum
-     * InterviewStatus la prévoit. Annule un entretien de candidature encore
-     * actif, libère le créneau anti-doublon et fait revenir la candidature
-     * au statut "éligible à planifier" du type concerné, pour qu'un nouvel
-     * entretien puisse être replanifié.
-     */
     @Transactional
     public InterviewDto annulerEntretien(String idInterview, String motif, String auteurKeycloakId, boolean isRH) {
         Interview interview = getEntityOuException(idInterview);
@@ -587,6 +504,7 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         interview.setActiveSlotKey(null);
 
         Interview saved = interviewRepository.save(interview);
+        recrutementRealtimeService.notifyInterviewAnnule(saved);
 
         if (saved.getApplicationId() != null && saved.getType() != null) {
             Application application = applyService.getApplicationOuException(saved.getApplicationId());
@@ -603,10 +521,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         return toDto(saved);
     }
 
-    /**
-     * BUG FIX : transition ABSENT absente. Un candidat absent est traité
-     * comme un échec métier (rejet), avec une trace dédiée dans les notes.
-     */
     @Transactional
     public InterviewDto marquerAbsent(String idInterview, String auteurKeycloakId, boolean isRH) {
         Interview interview = getEntityOuException(idInterview);
@@ -627,6 +541,7 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         interview.setActiveSlotKey(null);
 
         Interview saved = interviewRepository.save(interview);
+        recrutementRealtimeService.notifyInterviewAbsent(saved);
 
         if (saved.getApplicationId() != null) {
             applyService.changerStatutSysteme(saved.getApplicationId(), ApplicationStatus.REJETE,
@@ -636,10 +551,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         return toDto(saved);
     }
 
-    /**
-     * BUG FIX : transition REPORTE absente. Reste actif (garde son
-     * activeSlotKey), seule la date change.
-     */
     @Transactional
     public InterviewDto reporterEntretien(
             String idInterview, LocalDateTime nouvelleDate, String auteurKeycloakId, boolean isRH) {
@@ -665,17 +576,11 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         interview.setDateFinEntretien(nouvelleDate.plusHours(1));
         interview.setDateModification(LocalDateTime.now());
 
-        return toDto(interviewRepository.save(interview));
+        Interview saved = interviewRepository.save(interview);
+        recrutementRealtimeService.notifyInterviewReporte(saved);
+        return toDto(saved);
     }
 
-    /**
-     * BUG FIX (mélange d'entretiens entre cycles / créneau fantôme après
-     * retrait) : appelé automatiquement quand ApplyService publie
-     * ApplicationInterviewsShouldCloseEvent (retrait de candidature ou
-     * redépôt après retrait). Ferme tout entretien encore actif rattaché à
-     * cette candidature et libère son activeSlotKey, pour qu'un nouveau
-     * cycle puisse planifier sereinement de nouveaux entretiens.
-     */
     @EventListener
     @Transactional
     public void onApplicationInterviewsShouldClose(ApplicationInterviewsShouldCloseEvent event) {
@@ -691,7 +596,8 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
             interview.setDateModification(LocalDateTime.now());
             String note = event.getMotif() != null ? event.getMotif() : "Clôturé automatiquement";
             interview.setNotes(note);
-            interviewRepository.save(interview);
+            Interview saved = interviewRepository.save(interview);
+            recrutementRealtimeService.notifyInterviewAnnule(saved);
             log.info("Entretien {} clôturé automatiquement pour la candidature {} ({})",
                     interview.getIdInterview(), event.getApplicationId(), note);
         }
@@ -758,18 +664,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         return applicationId + "|" + type + "|" + cycle;
     }
 
-    /**
-     * BUG FIX : on stockait auparavant l'UUID Keycloak brut comme
-     * interviewerName. On tente ici de résoudre un nom affichable via
-     * UserServiceClient.
-     * <p>
-     * ADAPTER : le nom exact de la méthode dépend de votre client existant
-     * (ex: userServiceClient.getEmployeByKeycloakId(id)). Remplacez l'appel
-     * ci-dessous par la méthode réelle exposée par votre UserServiceClient.
-     * En attendant / en cas d'échec, on retombe sur le nom fourni
-     * explicitement par l'appelant (fallbackName), puis sur l'UUID en tout
-     * dernier recours, avec un log pour ne pas masquer le problème.
-     */
     private String resolveDisplayName(String keycloakId, String fallbackName) {
         if (!estVide(fallbackName) && !estUuid(fallbackName)) {
             return fallbackName.trim();
@@ -801,7 +695,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         if (!estVide(fallbackName) && !estUuid(fallbackName)) {
             return fallbackName.trim();
         }
-        // ne plus renvoyer l'UUID à l'UI
         return !estVide(fallbackName) && !estUuid(fallbackName) ? fallbackName : "—";
     }
 
@@ -877,7 +770,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
         String full = (p + " " + n).trim();
         return full.isEmpty() ? null : full;
     }
-    // ==================== Mapping ====================
 
     private Interview getEntityOuException(String id) {
         return interviewRepository.findById(id)
@@ -916,11 +808,6 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
                 .build();
     }
 
-    /**
-     * BUG FIX : un LocalDate.parse / LocalTime.parse malformé venant du
-     * front remontait auparavant en DateTimeParseException non gérée
-     * (500 générique). On la traduit désormais en erreur métier claire.
-     */
     private Interview fromDto(InterviewDto dto) {
         try {
             LocalDate date = dto.getInterviewDate() != null ? LocalDate.parse(dto.getInterviewDate()) : null;
@@ -972,7 +859,7 @@ public InterviewDto updateLibre(String id, InterviewDto dto, String auteurKeyclo
                 .filter(i -> STATUTS_ACTIFS.contains(i.getStatut()))
                 .sorted(Comparator.comparing(Interview::getDateEntretien,
                         Comparator.nullsLast(Comparator.naturalOrder())))
-                .map(this::toCandidatTechniqueDto) // overload (Interview e) déjà présent
+                .map(this::toCandidatTechniqueDto)
                 .collect(Collectors.toList());
     }
 }
