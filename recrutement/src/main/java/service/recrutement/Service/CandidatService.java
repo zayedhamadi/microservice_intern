@@ -17,7 +17,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 import service.recrutement.Entity.Application;
 import service.recrutement.Entity.Interview;
-import service.recrutement.Entity.Enum.ApplicationStatus;
 import service.recrutement.Entity.Enum.InterviewStatus;
 import service.recrutement.Entity.Enum.InterviewType;
 import service.recrutement.Entity.dto.InterviewDto;

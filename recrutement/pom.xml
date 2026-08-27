@@ -31,8 +31,6 @@
         <spring-cloud.version>2025.0.3</spring-cloud.version>
     </properties>
     <dependencies>
-
-
         <dependency>
             <groupId>com.google.api-client</groupId>
             <artifactId>google-api-client</artifactId>

@@ -12,7 +12,6 @@ import service.recrutement.Entity.dto.PosteRecrutementDto;
 import service.recrutement.Mail.RecrutementMail;
 import service.recrutement.Repository.PosteRecrutementRepository;
 
-import javax.swing.text.html.Option;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -58,6 +57,7 @@ public class PosteRecrutementService {
             this.posteRecrutementRepository.deleteById(id);
             return posteRecrutement;
         } catch (Exception e) {
+
             log.error(e.getMessage());
             throw e;
         }

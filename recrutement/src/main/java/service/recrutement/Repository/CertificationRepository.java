@@ -9,11 +9,26 @@ import service.recrutement.Entity.Certification;
 import java.util.List;
 
 @Repository
-public interface CertificationRepository extends MongoRepository<Certification, String> {
-    Page<Certification> findByKeycloakId(String keycloakId, Pageable pageable);
+public interface CertificationRepository
+        extends MongoRepository<Certification, String> {
 
-    Page<Certification> findByKeycloakIdAndTitreContainingIgnoreCase(
-            String keycloakId, String titre, Pageable pageable);
+    Page<Certification> findByKeycloakId(
+            String keycloakId,
+            Pageable pageable
+    );
 
-    List<Certification> findByKeycloakId(String keycloakId);
+    Page<Certification>
+    findByKeycloakIdAndTitreContainingIgnoreCase(
+            String keycloakId,
+            String titre,
+            Pageable pageable
+    );
+
+    List<Certification> findByKeycloakId(
+            String keycloakId
+    );
+
+    long countByKeycloakId(
+            String keycloakId
+    );
 }

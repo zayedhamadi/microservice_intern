@@ -22,7 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@PreAuthorize("hasAnyRole('EMPLOYEE')")
+@PreAuthorize("hasAnyRole('EMPLOYEE','RH')")
 @Slf4j
 @RestController
 @RequestMapping("/EmployeeManagementController")

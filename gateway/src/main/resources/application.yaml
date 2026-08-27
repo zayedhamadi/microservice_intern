@@ -96,8 +96,16 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/rh/**
+            - id: recrutement-service-stats-dashboard-rh
+              uri: lb://RECRUTEMENT-SERVICE
+              predicates:
+                - Path=/api/recrutement/stats/**
 
 
+            - id: recrutement-service-dashboard-candidat
+              uri: lb://RECRUTEMENT-SERVICE
+              predicates:
+                - Path=/api/recrutement/candidat/dashboard/**
     loadbalancer:
       cache:
         ttl: 5s
