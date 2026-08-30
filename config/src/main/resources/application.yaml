@@ -1,9 +1,17 @@
+# ============================================================
+# CONFIG SERVER
+# ============================================================
+
 server:
-  port: 8888
+  port: ${CONFIG_PORT:8888}
+  shutdown: graceful
 
 spring:
   application:
     name: config-server
+
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
 
   profiles:
     active: native
@@ -12,19 +20,69 @@ spring:
     config:
       server:
         native:
-          search-locations: classpath:/config
+          search-locations: ${CONFIG_SEARCH_LOCATIONS:classpath:/config}
+
+
+# ============================================================
+# EUREKA CLIENT
+# ============================================================
 
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://discovery-service:8761/eureka/}
+
+    register-with-eureka: true
+    fetch-registry: true
+
+    registry-fetch-interval-seconds: ${EUREKA_FETCH_INTERVAL:30}
+
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}:${random.value}
+
+    lease-renewal-interval-in-seconds: ${EUREKA_RENEWAL_INTERVAL:30}
+    lease-expiration-duration-in-seconds: ${EUREKA_EXPIRATION:90}
+
+
+# ============================================================
+# ACTUATOR / OBSERVABILITY
+# ============================================================
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,refresh
+        include: health,info,prometheus
+
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+  prometheus:
+    metrics:
+      export:
+        enabled: ${PROMETHEUS_ENABLED:true}
+
+
+# ============================================================
+# LOGGING
+# ============================================================
 
 logging:
   level:
-    org.springframework.cloud.config: debug
+    root: ${LOG_LEVEL:INFO}
+
+    org.springframework.cloud.config: ${CONFIG_LOG_LEVEL:INFO}
+
+    org.springframework.cloud.netflix.eureka: ${EUREKA_LOG_LEVEL:INFO}
+
+    com.netflix.discovery: ${EUREKA_DISCOVERY_LOG_LEVEL:INFO}

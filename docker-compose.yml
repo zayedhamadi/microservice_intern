@@ -1,429 +1,1104 @@
-networks:
-  stage-network:
-    driver: bridge
-    name: stage-network
+# ============================================================
+# HIRELY / SUPRA TECHNOLOGY
+# DOCKER COMPOSE - DEVELOPMENT / INTEGRATION
+# ============================================================
+#
+# REVUE SENIOR — changements appliqués vs version originale :
+#
+#   1. FIX CRITIQUE : ajout de `image:` sur tous les services
+#      `build:` pour retomber sur les noms que vous avez déjà
+#      buildés manuellement (cf. `docker images`). Sans ça,
+#      `docker compose build` génère ses propres noms
+#      (hirely-stage-<service>:latest) et vos images actuelles
+#      deviennent orphelines.
+#
+#   2. FIX CRITIQUE : ajout de `build.args` (GIT_COMMIT,
+#      BUILD_DATE, APP_VERSION) — manquait totalement, donc
+#      tous les labels OCI de vos images étaient "unknown".
+#
+#   3. FIX CRITIQUE : bloc `environment` ajouté sur
+#      keycloak-backup. Le script backup.sh a ENCRYPT=true par
+#      défaut et exit 1 immédiatement si GPG_PASSPHRASE_FILE
+#      n'est pas fourni. Le service tel quel ne pouvait pas
+#      fonctionner.
+#
+#   4. FIX : MYSQL_ROOT_PASSWORD utilisait un fallback imbriqué
+#      ${VAR:-${AUTRE_VAR}} — Compose n'interpole pas
+#      récursivement une valeur par défaut, donc en l'absence de
+#      MYSQL_ROOT_PASSWORD le mot de passe root pouvait finir
+#      littéralement égal à la chaîne "${DB_PASSWORD}".
+#
+#   5. FIX : keycloak et mongo alignés sur les versions
+#      réellement en service (26.0.5 / mongo:7), confirmées par
+#      `docker ps -a` sur les conteneurs existants attachés aux
+#      volumes de données. Passer à 26.0.8 / 7.0.39 sans backup
+#      préalable du volume `keycloak_microservice_stage` ferait
+#      tourner Keycloak avec un schéma DB potentiellement
+#      incompatible avec la version d'origine.
+#      jenkins-with-docker:latest n'apparaît pas dans
+#      `docker images` : à builder localement avant `up`, sinon
+#      Compose tentera un pull qui échouera (image absente de
+#      Docker Hub sous ce nom).
+#
+#   6. NOTE : les volumes external (mongo_volume,
+#      keycloak_microservice_stage) doivent déjà exister sur la
+#      machine avant `docker compose up`.
+#
+# ============================================================
 
-volumes:
-  mysql-data:
-  mongo_data:
-    external: true
-    name: mongo_micro_volume        # réutilise le volume déjà créé manuellement
-  jenkins_home:
-    external: true
-  keycloak-data:
-    external: true
-    name: keycloak_microservice_stage
-  sonar-db-data:
-  sonar-data:
-  sonar-extensions:
-  sonar-logs:
+name: hirely-stage
 
-# ---------------------------------------------------------------------------
-# Ancres réutilisables : évite de répéter la même config de logging partout
-# ---------------------------------------------------------------------------
+
+# ============================================================
+# SECURITY
+# ============================================================
+
+# Infrastructure :
+# MySQL / MongoDB / Keycloak ont besoin de certaines
+# capabilities pendant leur initialisation.
+x-infra-security: &infra-security
+  security_opt:
+    - no-new-privileges:true
+
+
+# Applications contrôlées par nous :
+# Spring Boot / Nginx peuvent fonctionner sans capabilities.
+x-app-security: &app-security
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+
+# ============================================================
+# BUILD ARGS COMMUNS
+# ============================================================
+#
+# FIX : ces variables étaient déclarées dans les Dockerfiles
+# (ARG GIT_COMMIT / BUILD_DATE / APP_VERSION) mais jamais
+# transmises par le compose -> labels OCI toujours "unknown".
+# Elles sont lues depuis l'environnement du shell qui lance
+# `docker compose build` (ex: injectées par Jenkins), avec un
+# fallback "unknown" en local si non définies.
+# ============================================================
+
+x-build-args: &build-args
+  GIT_COMMIT: ${GIT_COMMIT:-unknown}
+  BUILD_DATE: ${BUILD_DATE:-unknown}
+  APP_VERSION: ${APP_VERSION:-unknown}
+
+
+# ============================================================
+# LOGGING
+# ============================================================
+
 x-logging: &default-logging
   driver: json-file
   options:
     max-size: "10m"
     max-file: "3"
 
-x-security: &default-security
-  security_opt:
-    - no-new-privileges:true
+
+# ============================================================
+# SERVICES
+# ============================================================
 
 services:
 
+
+  # ==========================================================
+  # MYSQL
+  # ==========================================================
+
   mysql:
-    image: mysql:8.0
+    image: mysql:8.0.43
     container_name: stage_mysql
+
     restart: unless-stopped
-    <<: *default-security
+
+    <<: *infra-security
+
     environment:
+      # FIX : suppression du fallback imbriqué
+      # ${MYSQL_ROOT_PASSWORD:-${DB_PASSWORD}} qui n'est pas
+      # garanti d'être ré-interpolé par Compose. On utilise
+      # directement DB_PASSWORD comme source unique de vérité
+      # pour le mot de passe root MySQL en environnement de dev.
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+
+      # Base principale de l'application User
       MYSQL_DATABASE: employee_db
+
     ports:
-      - "3307:3306"
+      # Accessible uniquement depuis la machine Windows
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
+
     volumes:
       - mysql-data:/var/lib/mysql
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 768M
           cpus: "1.0"
+
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 20s
+      start_period: 30s
+
+
+  # ==========================================================
+  # KEYCLOAK
+  # ==========================================================
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0
+    # FIX : aligné sur la version réellement en service
+    # (confirmée par `docker ps -a` sur le conteneur existant
+    # attaché au volume keycloak_microservice_stage). Ne pas
+    # monter en version sans backup + migration validée.
+    image: quay.io/keycloak/keycloak:26.0.5
     container_name: stage_keycloak
+
     restart: unless-stopped
-    <<: *default-security
-    command: start-dev --import-realm
+
+    <<: *infra-security
+
+    command:
+      - start-dev
+      - --import-realm
+
     environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PWD}
+
+      # ------------------------------------------------------
+      # ADMIN
+      # ------------------------------------------------------
+
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PWD}
+
+      # ------------------------------------------------------
+      # DATABASE
+      # ------------------------------------------------------
+
       KC_DB: mysql
+
       KC_DB_URL: jdbc:mysql://mysql:3306/keycloak_db?createDatabaseIfNotExist=true
-      KC_DB_USERNAME: ${DB_USERNAME}
+
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USERNAME:-root}
       KC_DB_PASSWORD: ${DB_PASSWORD}
+
+      # ------------------------------------------------------
+      # HEALTH / METRICS
+      # ------------------------------------------------------
+
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+
+      # Management interface
+      KC_HTTP_MANAGEMENT_PORT: 9000
+
     ports:
-      - "8180:8080"
+      - "127.0.0.1:${KEYCLOAK_PORT:-8180}:8080"
+
+    expose:
+      - "9000"
+
     volumes:
+
+      # Volume existant :
+      # keycloak_microservice_stage
       - keycloak-data:/opt/keycloak/data
+
+      # Realm import uniquement en lecture
       - ./keycloak-import:/opt/keycloak/data/import:ro
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 768M
           cpus: "1.0"
+
     depends_on:
+
       mysql:
         condition: service_healthy
+
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
+
+      # Keycloak expose la readiness sur 9000.
+      #
+      # On utilise bash explicitement pour /dev/tcp.
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000 && printf \"HEAD /health/ready HTTP/1.0\\r\\n\\r\\n\" >&3 && head -n 1 <&3 | grep -q \"200\"'"
+        ]
+
       interval: 15s
       timeout: 5s
-      start_period: 30s
       retries: 10
+      start_period: 90s
+
+
+  # ==========================================================
+  # MONGODB
+  # ==========================================================
 
   mongo-recrutement:
+    # FIX : aligné sur la version réellement en service
+    # (confirmée par `docker ps -a` sur le conteneur existant
+    # mongo-recrutement). mongo:7 est un tag flottant (il pointe
+    # vers la dernière mineure/patch 7.x disponible au moment du
+    # pull) — pas idéal pour la reproductibilité, mais cohérent
+    # avec ce qui tourne déjà. À épingler en 7.x.y précis dès que
+    # vous confirmez la version exacte actuellement utilisée
+    # (`docker inspect mongo-recrutement --format '{{.Config.Image}}'`
+    # puis `docker image inspect` sur le digest pour retrouver le
+    # tag complet).
     image: mongo:7
     container_name: mongo-recrutement-container
+
     restart: unless-stopped
-    <<: *default-security
+
+    <<: *infra-security
+
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
       MONGO_INITDB_DATABASE: recrutement_db
+
     ports:
-      - "27017:27017"
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
+
+    # IMPORTANT :
+    # volume existant confirmé précédemment.
     volumes:
-      - mongo_data:/data/db
+      - mongo-data:/data/db
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 512M
           cpus: "0.5"
+
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--username",
+          "${MONGO_USER}",
+          "--password",
+          "${MONGO_PASSWORD}",
+          "--authenticationDatabase",
+          "admin",
+          "--eval",
+          "db.adminCommand('ping').ok"
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 20s
+      start_period: 30s
+
+
+  # ==========================================================
+  # CONFIG SERVER
+  # ==========================================================
 
   config-server:
+    # FIX : image épinglée sur le nom déjà buildé manuellement
+    # (cf. `docker images`), au lieu du nom par défaut Compose
+    # (hirely-stage-config-server:latest).
+    image: stage_backend_config:latest
+
     build:
       context: ./config
       dockerfile: Dockerfile
+      args:
+        <<: *build-args
+
     container_name: stage_config
+
     restart: unless-stopped
-    <<: *default-security
+
+    <<: *app-security
+
     read_only: true
+
     tmpfs:
       - /tmp
-    env_file: .env
+
+    env_file:
+      - .env
+
     environment:
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+
+      CONFIG_PORT: 8888
+
+      # FIX CRITIQUE : le Dockerfile fixe ENV SPRING_PROFILES_ACTIVE=prod,
+      # qui écrase (une variable d'env a toujours priorité sur
+      # application.yml) le `spring.profiles.active: native` défini dans
+      # le application.yml du config-server. Résultat : au runtime seul
+      # "prod" était actif, Spring Cloud Config retombait sur son backend
+      # Git par défaut (aucune URI configurée) et le contexte crashait au
+      # démarrage -> healthcheck toujours "connection refused".
+      #
+      # On surcharge ici explicitement pour ce service uniquement afin
+      # que le profil "native" (celui qui active
+      # spring.cloud.config.server.native.search-locations) soit bien
+      # celui qui compte au démarrage.
+      SPRING_PROFILES_ACTIVE: native
+
     ports:
-      - "${CONFIG_PORT}:8888"
+      - "127.0.0.1:${CONFIG_PORT:-8888}:8888"
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 384M
           cpus: "0.5"
+
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8888/actuator/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8888/actuator/health"
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 40s
+
+
+  # ==========================================================
+  # DISCOVERY / EUREKA
+  # ==========================================================
 
   discovery:
+    # FIX : image épinglée sur le nom déjà buildé manuellement.
+    image: stage_backend_discovery:latest
+
     build:
       context: ./discovery
       dockerfile: Dockerfile
+      args:
+        <<: *build-args
+
     container_name: stage_discovery
+
     restart: unless-stopped
-    <<: *default-security
+
+    <<: *app-security
+
     read_only: true
+
     tmpfs:
       - /tmp
-    env_file: .env
+
+    env_file:
+      - .env
+
     environment:
+
+      DISCOVERY_PORT: 8761
+
       SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://localhost:8761/eureka/
+
+      # Eureka doit s'annoncer avec son nom Docker
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+
     ports:
-      - "${DISCOVERY_PORT}:8761"
+      - "127.0.0.1:${DISCOVERY_PORT:-8761}:8761"
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 384M
           cpus: "0.5"
+
     depends_on:
+
       config-server:
         condition: service_healthy
+
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8761/actuator/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8761/actuator/health"
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 40s
+
+
+  # ==========================================================
+  # API GATEWAY
+  # ==========================================================
 
   gateway:
+    # FIX : image épinglée sur le nom déjà buildé manuellement.
+    image: stage_backend_gateway:latest
+
     build:
       context: ./gateway
       dockerfile: Dockerfile
+      args:
+        <<: *build-args
+
     container_name: stage_gateway
+
     restart: unless-stopped
-    <<: *default-security
+
+    <<: *app-security
+
     read_only: true
+
     tmpfs:
       - /tmp
-    env_file: .env
+
+    env_file:
+      - .env
+
     environment:
-      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888
+
+      GATEWAY_PORT: 8080
+
+      CONFIG_SERVER_URL: http://config-server:8888
+
+      EUREKA_URL: http://discovery:8761/eureka/
+
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+
+      KEYCLOAK_URL: http://keycloak:8080
+
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/${KEYCLOAK_REALM}
+
     ports:
-      - "${GATEWAY_PORT}:8080"
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 512M
           cpus: "0.75"
+
     depends_on:
+
       discovery:
         condition: service_healthy
+
       keycloak:
         condition: service_healthy
+
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8080/actuator/health"
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 45s
+
+
+  # ==========================================================
+  # USER SERVICE
+  # ==========================================================
 
   user-service:
+    # FIX : image épinglée sur le nom déjà buildé manuellement.
+    image: stage_backend_user:latest
+
     build:
       context: ./user
       dockerfile: Dockerfile
+      args:
+        <<: *build-args
+
     container_name: stage_user
+
     restart: unless-stopped
-    <<: *default-security
+
+    <<: *app-security
+
     read_only: true
+
     tmpfs:
       - /tmp
-    env_file: .env
+
+    env_file:
+      - .env
+
     environment:
-      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888
+
+      EMPLOYEE_PORT: 8081
+
+      CONFIG_SERVER_URL: http://config-server:8888
+
+      EUREKA_URL: http://discovery:8761/eureka/
+
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+
+      # IMPORTANT :
+      # localhost interdit entre conteneurs.
       DB_URL: jdbc:mysql://mysql:3306/employee_db?createDatabaseIfNotExist=true
-      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/${KEYCLOAK_REALM}
+
+      DB_USERNAME: ${DB_USERNAME}
+
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      # FIX : le profil "prod" (actif via le Dockerfile) bascule Hibernate
+      # sur ddl-auto=validate (n'accepte que des tables déjà existantes,
+      # ne crée jamais rien). Comme ce projet n'a pas d'outil de migration
+      # SQL (Flyway/Liquibase) et que les tables étaient auparavant créées
+      # automatiquement par Hibernate, on force explicitement "update"
+      # pour retrouver ce comportement en stage/dev. À ne PAS utiliser
+      # ainsi en vraie prod (risque de modification de schéma non
+      # contrôlée) — la bonne pratique long terme reste d'introduire
+      # Flyway/Liquibase avec des scripts de migration versionnés.
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
       KEYCLOAK_URL: http://keycloak:8080
+
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/${KEYCLOAK_REALM}
+
     ports:
-      - "${EMPLOYEE_PORT}:8081"
+      - "127.0.0.1:${EMPLOYEE_PORT:-8081}:8081"
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 512M
           cpus: "0.75"
+
     depends_on:
+
       mysql:
         condition: service_healthy
+
       discovery:
         condition: service_healthy
+
       keycloak:
         condition: service_healthy
+
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
-      interval: 10s
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8081/actuator/health"
+        ]
+      interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 40s
+      start_period: 60s
+
+
+  # ==========================================================
+  # RECRUTEMENT SERVICE
+  # ==========================================================
 
   recrutement-service:
+    # FIX : image épinglée sur le nom déjà buildé manuellement.
+    image: stage_backend_recrutement:latest
+
     build:
       context: ./recrutement
       dockerfile: Dockerfile
+      args:
+        <<: *build-args
+
     container_name: stage_recrutement
+
     restart: unless-stopped
-    <<: *default-security
+
+    <<: *app-security
+
     read_only: true
+
     tmpfs:
       - /tmp
-    env_file: .env
+
+    env_file:
+      - .env
+
     environment:
-      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888
+
+      RECRUTEMENT_PORT: 8082
+
+      CONFIG_SERVER_URL: http://config-server:8888
+
+      EUREKA_URL: http://discovery:8761/eureka/
+
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+
       MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo-recrutement:27017/recrutement_db?authSource=admin
+
       KEYCLOAK_URL: http://keycloak:8080
+
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/${KEYCLOAK_REALM}
+
       USER_SERVICE_URL: http://user-service:8081
+
+      # IA non dockerisée actuellement.
+      # host.docker.internal permet au conteneur
+      # d'appeler un service lancé directement sur Windows.
+      RANKING_SERVICE_URL: ${RANKING_SERVICE_URL:-http://host.docker.internal:8002}
+
     ports:
-      - "${RECRUTEMENT_PORT}:8082"
+      - "127.0.0.1:${RECRUTEMENT_PORT:-8082}:8082"
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 512M
           cpus: "0.75"
+
     depends_on:
+
       mongo-recrutement:
         condition: service_healthy
+
       discovery:
         condition: service_healthy
+
       keycloak:
         condition: service_healthy
+
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health"]
-      interval: 10s
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8082/actuator/health"
+        ]
+      interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 40s
+      start_period: 60s
+
+
+  # ==========================================================
+  # FRONTEND ANGULAR + NGINX
+  # ==========================================================
 
   frontend:
+    # FIX : image épinglée sur le nom déjà buildé manuellement.
+    image: stage_frontend:latest
+
     build:
       context: ../stage_front/frontend-microservice
       dockerfile: Dockerfile
+      args:
+        <<: *build-args
+
     container_name: stage_frontend
+
     restart: unless-stopped
-    <<: *default-security
+
+    <<: *app-security
+
     read_only: true
+
     tmpfs:
       - /tmp
       - /var/cache/nginx
       - /var/run
+
     ports:
-      - "4200:8080"
+      - "127.0.0.1:${FRONTEND_PORT:-4200}:8080"
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 256M
           cpus: "0.5"
+
     depends_on:
+
       gateway:
         condition: service_healthy
+
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8080/health"
+        ]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 15s
+
+
+  # ==========================================================
+  # KEYCLOAK BACKUP
+  # ==========================================================
 
   keycloak-backup:
+    # FIX : image épinglée sur le nom déjà buildé manuellement.
+    image: stage_bd_keycloak_backup:latest
+
     build:
       context: ./keycloak-backup
       dockerfile: Dockerfile
+      args:
+        <<: *build-args
+
     container_name: stage_keycloak_backup
-    profiles: ["tools"]
-    <<: *default-security
+
+    profiles:
+      - tools
+
+    <<: *app-security
+
+    # FIX CRITIQUE : ce bloc n'existait pas. backup.sh a
+    # ENCRYPT=true par défaut et exit 1 si GPG_PASSPHRASE_FILE
+    # est absent -> le service échouait systématiquement.
+    #
+    # Ici, chiffrement désactivé par défaut pour un environnement
+    # de stage/dev. Pour l'activer en prod, montez la passphrase
+    # via un secret Docker (voir bloc `secrets:` commenté plus
+    # bas) et repassez ENCRYPT à "true".
+    environment:
+      ENCRYPT: "false"
+      RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      MIN_BACKUPS_KEPT: ${BACKUP_MIN_KEPT:-3}
+      WEBHOOK_URL: ${BACKUP_WEBHOOK_URL:-}
+
+    # Pour activer le chiffrement GPG en prod, décommentez :
+    #
+    # environment:
+    #   ENCRYPT: "true"
+    #   GPG_PASSPHRASE_FILE: /run/secrets/backup_gpg_pass
+    #
+    # secrets:
+    #   - backup_gpg_pass
+
     volumes:
+
+      # Lecture seule des données Keycloak
       - keycloak-data:/data:ro
-      - C:/keycloak_microservice_backup:/backup
+
+      # Windows :
+      # C:\stage\keycloak-backups
+      - ./keycloak-backups:/backup
+
     networks:
       - stage-network
+
     logging: *default-logging
 
+
+  # ==========================================================
+  # JENKINS
+  # ==========================================================
+
   jenkins:
+    # NOTE : cette image n'apparaît pas dans votre `docker
+    # images`. Elle doit être buildée localement sous ce tag
+    # exact avant `docker compose up --profile tools jenkins`,
+    # sinon Compose tentera un pull qui échouera (pas sur Docker
+    # Hub sous ce nom).
     image: jenkins-with-docker:latest
+
     container_name: stage_jenkins
+
     restart: unless-stopped
-    profiles: ["tools"]
+
+    profiles:
+      - tools
+
     ports:
-      - "8090:8080"
+      - "127.0.0.1:${JENKINS_PORT:-8090}:8080"
       - "50000:50000"
+
     volumes:
+
       - jenkins_home:/var/jenkins_home
+
+      # Jenkins peut construire les images Docker
       - /var/run/docker.sock:/var/run/docker.sock
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 2G
           cpus: "1.5"
 
+
+  # ==========================================================
+  # SONARQUBE DATABASE
+  # ==========================================================
+
   sonarqube-db:
     image: postgres:15-alpine
-    container_name: stage_sonar_db
+
+    container_name: stage_bd_sonar
+
     restart: unless-stopped
-    profiles: ["tools"]
-    <<: *default-security
+
+    profiles:
+      - tools
+
+    <<: *infra-security
+
     environment:
       POSTGRES_USER: sonar
       POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD}
       POSTGRES_DB: sonar
+
     volumes:
       - sonar-db-data:/var/lib/postgresql/data
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sonar"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U sonar -d sonar"
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 15s
+      start_period: 20s
+
+
+  # ==========================================================
+  # SONARQUBE
+  # ==========================================================
 
   sonarqube:
     image: sonarqube:community
+
     container_name: stage_sonarqube
+
     restart: unless-stopped
-    profiles: ["tools"]
-    <<: *default-security
+
+    profiles:
+      - tools
+
+    <<: *infra-security
+
     environment:
+
       SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/sonar
+
       SONAR_JDBC_USERNAME: sonar
+
       SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD}
+
     ports:
-      - "9000:9000"
+      - "127.0.0.1:${SONAR_PORT:-9000}:9000"
+
     volumes:
+
       - sonar-data:/opt/sonarqube/data
+
       - sonar-extensions:/opt/sonarqube/extensions
+
       - sonar-logs:/opt/sonarqube/logs
+
     networks:
       - stage-network
+
     logging: *default-logging
+
     deploy:
       resources:
         limits:
           memory: 2G
           cpus: "1.5"
+
     depends_on:
+
       sonarqube-db:
         condition: service_healthy
+
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/api/system/status | grep -q '\"status\":\"UP\"' || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:9000/api/system/status | grep -q '\"status\":\"UP\"'"
+        ]
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 90s
+      start_period: 120s
+
+
+# ============================================================
+# NETWORK
+# ============================================================
+
+networks:
+
+  stage-network:
+    name: stage-network
+    driver: bridge
+
+
+# ============================================================
+# VOLUMES
+# ============================================================
+
+volumes:
+
+  # ----------------------------------------------------------
+  # MYSQL
+  # ----------------------------------------------------------
+
+  mysql-data:
+    name: stage_mysql-data
+
+
+  # ----------------------------------------------------------
+  # MONGODB
+  # ----------------------------------------------------------
+  #
+  # Volume existant :
+  # mongo_volume
+  #
+  # NE PAS SUPPRIMER.
+  # ----------------------------------------------------------
+
+  mongo-data:
+    external: true
+    name: mongo_volume
+
+
+  # ----------------------------------------------------------
+  # KEYCLOAK
+  # ----------------------------------------------------------
+  #
+  # Volume existant :
+  # keycloak_microservice_stage
+  #
+  # NE PAS SUPPRIMER.
+  # ----------------------------------------------------------
+
+  keycloak-data:
+    external: true
+    name: keycloak_microservice_stage
+
+
+  # ----------------------------------------------------------
+  # JENKINS
+  # ----------------------------------------------------------
+
+  jenkins_home:
+    name: stage_jenkins_home
+
+
+  # ----------------------------------------------------------
+  # SONARQUBE
+  # ----------------------------------------------------------
+
+  sonar-db-data:
+    name: stage_sonar-db-data
+
+  sonar-data:
+    name: stage_sonar-data
+
+  sonar-extensions:
+    name: stage_sonar-extensions
+
+  sonar-logs:
+    name: stage_sonar-logs
+
+
+# ============================================================
+# SECRETS (désactivé par défaut — pour usage prod)
+# ============================================================
+#
+# secrets:
+#   backup_gpg_pass:
+#     file: ./secrets/backup_gpg_pass.txt

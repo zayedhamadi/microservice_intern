@@ -7,3 +7,6 @@ target/
 .env
 .env.example
 keycloak-import/
+export/**
+export/
+export/employee-realm-realm.json

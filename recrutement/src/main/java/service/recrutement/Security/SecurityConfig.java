@@ -20,7 +20,7 @@ public class SecurityConfig {
     private final JwtBlacklistFilter jwtBlacklistFilter;
 
     private static final String[] PUBLIC_URLS = {
-            "/actuator/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html"
+           "/ws-recrutement/**" ,   "/actuator/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html"
     };
 
     @Bean

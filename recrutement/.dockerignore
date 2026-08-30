@@ -1,15 +1,29 @@
-# A copier dans chaque contexte de build : config/, discovery/, gateway/, user/, recrutement/
-target/
 .git
 .gitignore
-.mvn
-*.log
-.idea
+.gitattributes
+
+.idea/
+.vscode/
 *.iml
+
+target/
+*.class
+HELP.md
+
 .env
 .env.*
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
 
-# Pour le contexte frontend (Angular)
-node_modules/
-dist/
-.angular/
+*.log
+logs/
+
+.DS_Store
+Thumbs.db
+
+docker-compose*.yml
+Dockerfile*
+.dockerignore
