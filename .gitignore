@@ -10,3 +10,10 @@ keycloak-import/
 export/**
 export/
 export/employee-realm-realm.json
+.env
+.env.example
+config/.env
+discovery/.env
+gateway/.env
+recrutement/.env
+user/.env
