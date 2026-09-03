@@ -10,7 +10,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'dev',
-                    credentialsId: 'git_ssh',
+                    credentialsId: 'github-account',
                     url: 'https://github.com/zayedhamadi/microservice_intern.git'
             }
         }

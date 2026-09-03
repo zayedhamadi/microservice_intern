@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "stage-config-server"
+        IMAGE_NAME = "stage-discovery"
         IMAGE_TAG  = "${env.BUILD_NUMBER}"
     }
 
@@ -10,17 +10,17 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'dev',
-                        credentialsId: 'git_ssh',
-                        url: 'https://github.com/zayedhamadi/microservice_intern.git'
+                    credentialsId: 'github-account',
+                    url: 'https://github.com/zayedhamadi/microservice_intern.git'
             }
         }
         stage('SonarQube Analysis') {
             steps {
-                dir('gateway') {
+                dir('discovery') {
                     script {
                         docker.image('maven:3.9-eclipse-temurin-21').inside("--network stage-network -v \$HOME/.m2:/root/.m2") {
                             withSonarQubeEnv('sonarqube') {
-                                sh 'mvn clean verify sonar:sonar -Dsonar.projectKey=stage-gateway'
+                                sh 'mvn clean verify sonar:sonar -Dsonar.projectKey=stage-discovery'
                             }
                         }
                     }
@@ -29,7 +29,7 @@ pipeline {
         }
         stage('Build Docker Image') {
             steps {
-                dir('config') {
+                dir('discovery') {
                     script {
                         docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
                     }
@@ -39,7 +39,7 @@ pipeline {
     }
 
     post {
-        success { echo "Build réussi pour config-server #${env.BUILD_NUMBER}" }
-        failure { echo "Échec du pipeline config-server #${env.BUILD_NUMBER}" }
+        success { echo "Build réussi pour discovery #${env.BUILD_NUMBER}" }
+        failure { echo "Échec du pipeline discovery #${env.BUILD_NUMBER}" }
     }
 }

@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "stage-user-service"
+        IMAGE_NAME = "stage-recrutement-service"
         IMAGE_TAG  = "${env.BUILD_NUMBER}"
     }
 
@@ -10,35 +10,35 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'dev',
-                        credentialsId: 'git_ssh',
-                        url: 'https://github.com/zayedhamadi/microservice_intern.git'
+                    credentialsId: 'github-account',
+                    url: 'https://github.com/zayedhamadi/microservice_intern.git'
             }
         }
 
         stage('Run Tests') {
             steps {
-                dir('user') {
+                dir('recrutement') {
                     script {
                         docker.image('maven:3.9-eclipse-temurin-21').inside('-v $HOME/.m2:/root/.m2') {
-                            sh 'mvn clean test -Dtest=UserServiceTest,CessationServiceTest'
+                            sh 'mvn clean test'
                         }
                     }
                 }
             }
             post {
                 always {
-                    junit 'user/target/surefire-reports/*.xml'
+                    junit 'recrutement/target/surefire-reports/*.xml'
                 }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                dir('user') {
+                dir('recrutement') {
                     script {
                         docker.image('maven:3.9-eclipse-temurin-21').inside("--network stage-network -v \$HOME/.m2:/root/.m2") {
                             withSonarQubeEnv('sonarqube') {
-                                sh 'mvn sonar:sonar -Dsonar.projectKey=stage-user-service'
+                                sh 'mvn sonar:sonar -Dsonar.projectKey=stage-recrutement-service'
                             }
                         }
                     }
@@ -48,19 +48,17 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                dir('user') {
+                dir('recrutement') {
                     script {
                         docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
                     }
                 }
             }
         }
-
-
     }
 
     post {
-        success { echo "Build et tests réussis pour user-service #${env.BUILD_NUMBER}" }
-        failure { echo "Échec du pipeline user-service #${env.BUILD_NUMBER}" }
+        success { echo "Build et tests réussis pour recrutement-service #${env.BUILD_NUMBER}" }
+        failure { echo "Échec du pipeline recrutement-service #${env.BUILD_NUMBER}" }
     }
 }
