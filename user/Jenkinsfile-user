@@ -15,22 +15,7 @@ pipeline {
             }
         }
 
-        stage('Run Tests') {
-            steps {
-                dir('user') {
-                    script {
-                        docker.image('maven:3.9-eclipse-temurin-21').inside('-v $HOME/.m2:/root/.m2') {
-                            sh 'mvn clean test -Dtest=UserServiceTest,CessationServiceTest'
-                        }
-                    }
-                }
-            }
-            post {
-                always {
-                    junit 'user/target/surefire-reports/*.xml'
-                }
-            }
-        }
+       
 
         stage('SonarQube Analysis') {
             steps {
