@@ -879,7 +879,7 @@ services:
     # exact avant `docker compose up --profile tools jenkins`,
     # sinon Compose tentera un pull qui échouera (pas sur Docker
     # Hub sous ce nom).
-    image: jenkins-with-docker:latest
+    image: jenkins/jenkins:lts
 
     container_name: stage_jenkins
 
