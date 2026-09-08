@@ -1,53 +1,40 @@
-# ============================================================
-# CONFIG SERVER
-# ============================================================
-
 server:
   port: ${CONFIG_PORT:8888}
   shutdown: graceful
 
 spring:
   application:
-    name: config-server
+    name: config-service
 
   lifecycle:
     timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
 
   profiles:
-    active: native
+    active: prod
 
   cloud:
     config:
       server:
-        native:
-          search-locations: ${CONFIG_SEARCH_LOCATIONS:classpath:/config}
-
-
-# ============================================================
-# EUREKA CLIENT
-# ============================================================
+        git:
+          uri: ${CONFIG_GIT_URI}
+          default-label: ${CONFIG_GIT_BRANCH:dev}
+          search-paths:
+            - ${CONFIG_GIT_SEARCH_PATH:config-repo}
+          clone-on-start: true
 
 eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_URL:http://discovery-service:8761/eureka/}
-
     register-with-eureka: true
     fetch-registry: true
-
     registry-fetch-interval-seconds: ${EUREKA_FETCH_INTERVAL:30}
 
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${server.port}:${random.value}
-
     lease-renewal-interval-in-seconds: ${EUREKA_RENEWAL_INTERVAL:30}
     lease-expiration-duration-in-seconds: ${EUREKA_EXPIRATION:90}
-
-
-# ============================================================
-# ACTUATOR / OBSERVABILITY
-# ============================================================
 
 management:
   endpoints:
@@ -72,17 +59,9 @@ management:
       export:
         enabled: ${PROMETHEUS_ENABLED:true}
 
-
-# ============================================================
-# LOGGING
-# ============================================================
-
 logging:
   level:
     root: ${LOG_LEVEL:INFO}
-
     org.springframework.cloud.config: ${CONFIG_LOG_LEVEL:INFO}
-
     org.springframework.cloud.netflix.eureka: ${EUREKA_LOG_LEVEL:INFO}
-
     com.netflix.discovery: ${EUREKA_DISCOVERY_LOG_LEVEL:INFO}
