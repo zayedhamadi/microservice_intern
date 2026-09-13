@@ -64,7 +64,7 @@ spring:
                 - Path=/EmployeeManagementController/**
 
             - id: user-service-ws-admin
-              uri: lb://USER-SERVICE
+              uri: lb:ws://USER-SERVICE
               predicates:
                 - Path=/ws-admin/**
 
