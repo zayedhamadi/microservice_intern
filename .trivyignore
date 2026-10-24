@@ -1,0 +1,8 @@
+# spring-webmvc 6.2.19 : correctif uniquement en Spring 7 (Spring Boot 4).
+# XsltView et SSE avec vues ne sont pas utilises dans le projet. A revoir lors de la migration.
+CVE-2026-47884
+CVE-2026-47890
+
+# bcprov-jdk18on 1.80.2 : correctif 1.85 disponible.
+# TODO : forcer 1.85 via dependencyManagement dans les pom.xml, puis supprimer cette ligne.
+CVE-2026-8763

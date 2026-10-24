@@ -24,7 +24,13 @@ public class CorsConfig {
                 "http://localhost:5001",
                 "http://127.0.0.1:5001",
                 "http://localhost:5002",
-                "http://127.0.0.1:5002"
+                "http://127.0.0.1:5002",
+                "https://app.hirely.local",
+                "https://api.hirely.local",
+                "https://auth.hirely.local",
+                "https://app.hirely.local:30873",
+                "https://api.hirely.local:30873",
+                "https://auth.hirely.local:30873"
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));

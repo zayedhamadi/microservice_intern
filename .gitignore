@@ -17,3 +17,4 @@ discovery/.env
 gateway/.env
 recrutement/.env
 user/.env
+reports/

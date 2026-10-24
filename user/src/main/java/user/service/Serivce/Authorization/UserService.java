@@ -65,41 +65,57 @@ public class UserService {
         return saved;
     }
 
-    @Transactional
-    public User createBootstrapEmployee(String email, String password, String nom, String prenom) {
-        if (this.userFinderService.existsByEmail(email)) {
-            throw new IllegalStateException("Le compte bootstrap existe déjà : " + email);
-        }
-
-        RegisterRequest fakeDto = RegisterRequest.builder()
-                .email(email)
-                .password(password)
-                .nom(nom)
-                .prenom(prenom)
-                .role(Role.EMPLOYEE)
-                .build();
-
-        String keycloakId = keycloakService.createUserInKeycloak(fakeDto);
-
-        User user = User.builder()
-                .keycloakId(keycloakId)
-                .email(email)
-                .nom(nom)
-                .prenom(prenom)
-                .role(Role.EMPLOYEE)
-                .etatCompte(Compte.ACTIF)
-                .build();
-        log.info(" create Bootstrap Employee avec success ", user);
-        return userRepository.save(user);
+   @Transactional
+public User createBootstrapEmployee(String email, String password, String nom, String prenom) {
+    if (this.userFinderService.existsByEmail(email)) {
+        throw new IllegalStateException("Le compte bootstrap existe déjà : " + email);
     }
 
-    public AuthResponse login(LoginRequest dto) {
+    RegisterRequest fakeDto = RegisterRequest.builder()
+            .email(email)
+            .password(password)
+            .nom(nom)
+            .prenom(prenom)
+            .role(Role.EMPLOYEE)
+            .build();
+
+    String keycloakId;
+    try {
+        keycloakId = keycloakService.createUserInKeycloak(fakeDto);
+    } catch (RuntimeException e) {
+        if (e.getMessage() != null && e.getMessage().contains("Email déjà utilisé dans Keycloak")) {
+            log.warn("Compte Keycloak déjà présent pour {}, réutilisation de l'ID existant", email);
+            keycloakId = keycloakService.findKeycloakIdByEmail(email);
+        } else {
+            throw e;
+        }
+    }
+
+    User user = User.builder()
+            .keycloakId(keycloakId)
+            .email(email)
+            .nom(nom)
+            .prenom(prenom)
+            .role(Role.EMPLOYEE)
+            .etatCompte(Compte.ACTIF)
+            .build();
+    log.info("Bootstrap employee créé/synchronisé avec succès : {}", user);
+    return userRepository.save(user);
+}
+        public AuthResponse login(LoginRequest dto) {
+        long t0 = System.currentTimeMillis();
         User user = this.userFinderService.byEmail(dto.getEmail());
+        long t1 = System.currentTimeMillis();
+        log.info("TIMING byEmail: {} ms", t1 - t0);
+
         if (user.getEtatCompte() == Compte.INACTIF) {
             throw new RuntimeException("Compte désactivé. Contacte l'administrateur.");
         }
 
         AuthResponse response = keycloakService.login(dto);
+        long t2 = System.currentTimeMillis();
+        log.info("TIMING keycloakService.login: {} ms", t2 - t1);
+
         response.setEmail(user.getEmail());
         response.setNom(user.getNom());
         response.setPrenom(user.getPrenom());
@@ -112,8 +128,10 @@ public class UserService {
         } catch (Exception e) {
             log.warn("WS notify login échoué : {}", e.getMessage());
         }
-        return response;
+        long t3 = System.currentTimeMillis();
+        log.info("TIMING notifyLoginActivity: {} ms", t3 - t2);
 
+        return response;
     }
 
     @Transactional

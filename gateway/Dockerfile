@@ -32,8 +32,8 @@ RUN chmod +x mvnw
 # id=m2-gateway : identifiant unique du cache pour ce service, afin
 # d'éviter les collisions/écrasements quand plusieurs services sont
 # buildés en parallèle (docker buildx bake / CI matrix).
-RUN --mount=type=cache,target=/root/.m2,id=m2-gateway \
-    ./mvnw -B dependency:go-offline
+RUN \
+    mvn -B dependency:go-offline
 
 
 # ============================================================
@@ -46,8 +46,8 @@ WORKDIR /build
 
 COPY src ./src
 
-RUN --mount=type=cache,target=/root/.m2,id=m2-gateway \
-    ./mvnw -B clean package -DskipTests
+RUN \
+    mvn -B clean package -DskipTests
 
 
 # ============================================================
