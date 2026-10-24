@@ -1,9 +1,19 @@
 pipeline {
     agent any
 
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '15'))
+    }
+
     environment {
-        IMAGE_NAME = "stage-config-server"
-        IMAGE_TAG  = "${env.BUILD_NUMBER}"
+        SERVICE_DIR  = "config"
+        IMAGE_NAME   = "ghcr.io/zayedhamadi/config-service"
+        SONAR_KEY    = "stage-config-server"
+        SONAR_SERVER = "sonarqube"
+        MAIL_TO      = "zayedh80@gmail.com"
     }
 
     stages {
@@ -12,16 +22,32 @@ pipeline {
                 git branch: 'dev',
                     credentialsId: 'github-account',
                     url: 'https://github.com/zayedhamadi/microservice_intern.git'
+                script {
+                    env.IMAGE_TAG = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                }
+                echo "Image : ${IMAGE_NAME}:${env.IMAGE_TAG}"
+            }
+        }
+
+        stage('Build & Test') {
+            steps {
+                dir("${SERVICE_DIR}") {
+                    script {
+                        docker.image('maven:3.9-eclipse-temurin-21').inside("-v \$HOME/.m2:/root/.m2") {
+                            sh 'mvn -B clean verify'
+                        }
+                    }
+                }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                dir('config') {
+                dir("${SERVICE_DIR}") {
                     script {
                         docker.image('maven:3.9-eclipse-temurin-21').inside("--network stage-network -v \$HOME/.m2:/root/.m2") {
-                            withSonarQubeEnv('sonarqube') {
-                                sh 'mvn clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.1.0.4751:sonar -Dsonar.projectKey=stage-config-server'
+                            withSonarQubeEnv(SONAR_SERVER) {
+                                sh "mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:5.1.0.4751:sonar -Dsonar.projectKey=${SONAR_KEY}"
                             }
                         }
                     }
@@ -29,11 +55,120 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Quality Gate') {
             steps {
-                dir('config') {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Build Image') {
+            steps {
+                dir("${SERVICE_DIR}") {
                     script {
-                        docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
+                        docker.build("${IMAGE_NAME}:${env.IMAGE_TAG}")
+                    }
+                }
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh '''
+                    set -e
+                    mkdir -p reports
+
+                    # 1) Rapport HTML : liste les failles HIGH et CRITICAL, ne bloque jamais
+                    trivy image \
+                        --exit-code 0 \
+                        --severity HIGH,CRITICAL \
+                        --ignore-unfixed \
+                        --ignorefile .trivyignore \
+                        --format template \
+                        --template "@ci/trivy-html.tpl" \
+                        --output reports/trivy-$SERVICE_DIR.html \
+                        $IMAGE_NAME:$IMAGE_TAG
+
+                    sed -i \
+                        -e "s|__SERVICE__|$SERVICE_DIR|g" \
+                        -e "s|__IMAGE__|$IMAGE_NAME:$IMAGE_TAG|g" \
+                        -e "s|__BUILD__|$BUILD_NUMBER|g" \
+                        -e "s|__DATE__|$(date '+%d/%m/%Y %H:%M')|g" \
+                        reports/trivy-$SERVICE_DIR.html
+
+                    # 2) Porte de sécurité : bloque seulement les failles CRITICAL
+                    trivy image \
+                        --exit-code 1 \
+                        --severity CRITICAL \
+                        --ignore-unfixed \
+                        --ignorefile .trivyignore \
+                        $IMAGE_NAME:$IMAGE_TAG
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/*.html', allowEmptyArchive: true
+                    emailext(
+                        to: "${MAIL_TO}",
+                        subject: "Rapport Trivy ${SERVICE_DIR} #${env.BUILD_NUMBER}",
+                        mimeType: 'text/html',
+                        attachmentsPattern: 'reports/*.html',
+                        body: "<p>Rapport de sécurité Trivy pour <b>${SERVICE_DIR}</b>, build #${env.BUILD_NUMBER}.</p><p>Ouvre la pièce jointe dans ton navigateur.</p>"
+                    )
+                }
+            }
+        }
+
+        stage('Push to GHCR') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'GHCR_SECRET', usernameVariable: 'GHCR_USER', passwordVariable: 'GHCR_PASS')]) {
+                    sh '''
+                        set -e
+                        echo "$GHCR_PASS" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+                    '''
+                    sh "docker push ${IMAGE_NAME}:${env.IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('Update hirely-devops') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-account', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    retry(3) {
+                        sh '''
+                            set -e
+                            rm -rf hirely-devops-update
+                            git clone https://$GIT_USER:$GIT_TOKEN@github.com/zayedhamadi/hirely-devops.git hirely-devops-update
+                            cd hirely-devops-update/overlays/prod
+                            kustomize edit set image $IMAGE_NAME=$IMAGE_NAME:$IMAGE_TAG
+                            git config user.email "jenkins@hirely.local"
+                            git config user.name "Jenkins CI"
+                            git add -A
+                            if git diff --cached --quiet; then
+                                echo "Aucun changement a commiter"
+                            else
+                                git commit -m "chore: bump $SERVICE_DIR to $IMAGE_TAG"
+                                git push origin main
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Sync ArgoCD') {
+            steps {
+                withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_TOKEN')]) {
+                    retry(2) {
+                        sh '''
+                            argocd app sync hirely \
+                                --grpc-web \
+                                --server argocd.hirely.local \
+                                --auth-token $ARGOCD_TOKEN \
+                                --insecure \
+                                --timeout 180
+                        '''
                     }
                 }
             }
@@ -41,7 +176,37 @@ pipeline {
     }
 
     post {
-        success { echo "Build réussi pour config-server #${env.BUILD_NUMBER}" }
-        failure { echo "Échec du pipeline config-server #${env.BUILD_NUMBER}" }
+        always {
+            sh '''
+                USAGE=$(df -P / | tail -1 | awk '{print $5}' | tr -d '%')
+                if [ "$USAGE" -gt 75 ]; then
+                    docker image prune -af --filter "until=48h" || true
+                    docker builder prune -af --filter "until=48h" || true
+                fi
+            '''
+            cleanWs(deleteDirs: true, notFailBuild: true)
+        }
+
+        success {
+            echo "Build et déploiement réussis pour ${SERVICE_DIR} #${env.BUILD_NUMBER} (image ${env.IMAGE_TAG})"
+        }
+
+        failure {
+            emailext(
+                to: "${MAIL_TO}",
+                subject: "Échec pipeline ${SERVICE_DIR} #${env.BUILD_NUMBER}",
+                mimeType: 'text/html',
+                attachLog: true,
+                body: """
+                    <h3>Pipeline ${SERVICE_DIR} en échec</h3>
+                    <ul>
+                      <li><b>Job :</b> ${env.JOB_NAME}</li>
+                      <li><b>Build :</b> #${env.BUILD_NUMBER}</li>
+                      <li><b>Console :</b> <a href="${env.BUILD_URL}console">${env.BUILD_URL}console</a></li>
+                    </ul>
+                    <p>Le log complet est en pièce jointe.</p>
+                """
+            )
+        }
     }
 }
